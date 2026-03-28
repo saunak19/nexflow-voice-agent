@@ -1,0 +1,172 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  VIEWER
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users          User[]
+  agents         Agent[]
+  callExecutions CallExecution[]
+  callLogs       CallLog[]
+  knowledgeBases KnowledgeBase[]
+  batches        Batch[]
+  sipTrunks      SipTrunk[]
+}
+
+// NextAuth.js Models
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(VIEWER)
+  tenantId      String?
+  accounts      Account[]
+  sessions      Session[]
+
+  tenant        Tenant?   @relation(fields: [tenantId], references: [id])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Agent {
+  id               String   @id @default(uuid())
+  tenantId         String
+  bolnaAgentId     String   // The ID on Bolna provider
+  name             String
+  prompt           String?
+  voiceConfig      Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id])
+  callExecutions CallExecution[]
+  batches        Batch[]
+}
+
+model CallExecution {
+  id               String   @id @default(uuid())
+  tenantId         String
+  agentId          String
+  bolnaExecutionId String   @unique
+  phoneNumber      String
+  status           String   @default("queued") // queued, in-progress, completed, failed
+  transcript       String?
+  recordingUrl     String?
+  duration         Int?     // duration in seconds
+  cost             Float?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  agent    Agent     @relation(fields: [agentId], references: [id])
+  callLogs CallLog[]
+
+  @@index([tenantId, createdAt])
+}
+
+model CallLog {
+  id              String   @id @default(uuid())
+  tenantId        String
+  callExecutionId String
+  event           String   // e.g. "call_started", "transcript_updated"
+  payload         Json?
+  createdAt       DateTime @default(now())
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  callExecution CallExecution @relation(fields: [callExecutionId], references: [id])
+
+  @@index([tenantId, createdAt])
+}
+
+model KnowledgeBase {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  type      String   // "pdf" or "url"
+  sourceUrl String?
+  bolnaKbId String?  @unique
+  status    String   @default("pending") // pending, indexing, completed, failed
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model Batch {
+  id             String   @id @default(uuid())
+  tenantId       String
+  agentId        String
+  name           String
+  status         String   @default("queued") // queued, in-progress, completed, stopped
+  totalCalls     Int      @default(0)
+  completedCalls Int      @default(0)
+  failedCalls    Int      @default(0)
+  bolnaBatchId   String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  agent          Agent    @relation(fields: [agentId], references: [id])
+}
+
+model SipTrunk {
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String
+  inboundUrl   String?
+  outboundUrl  String?
+  bolnaTrunkId String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+}
