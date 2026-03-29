@@ -133,3 +133,37 @@ export async function syncBatchProgressAction(formData: FormData) {
     throw new Error("Failed to sync batch progress.");
   }
 }
+
+export async function uploadBatchAction(formData: FormData) {
+  try {
+    const agentId = formData.get("agentId") as string;
+    const file = formData.get("file") as File;
+    const runType = formData.get("runType") as "now" | "schedule";
+    const scheduledAt = formData.get("scheduledAt") as string;
+    const webhookUrl = formData.get("webhookUrl") as string;
+
+    if (!agentId) throw new Error("Agent is required.");
+    if (!file || file.size === 0 || !file.name.endsWith('.csv')) {
+      throw new Error("A valid .csv file is required.");
+    }
+
+    // 1. Upload the CSV to create the batch
+    const batchResponse = await bolnaClient.createBatch(agentId, file, { name: file.name });
+    
+    // 2. Schedule the batch if requested
+    if (runType === "schedule" && scheduledAt) {
+      const isoDate = new Date(scheduledAt).toISOString();
+      await bolnaClient.scheduleBatch(batchResponse.batch_id, isoDate);
+    }
+
+    // 3. (Optional) Save to local Prisma DB if you track batches locally
+    // await prisma.batch.create({ ... });
+
+  } catch (error) {
+    console.error("[uploadBatchAction]:", error);
+    throw new Error("Failed to upload batch. Please try again.");
+  }
+
+  revalidatePath("/dashboard/batches");
+  redirect("/dashboard/batches");
+}

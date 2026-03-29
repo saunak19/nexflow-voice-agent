@@ -16,6 +16,7 @@ import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { deleteKnowledgeBaseAction } from "@/app/dashboard/knowledge-base/actions";
+import { CreateKnowledgeDialog } from "./_components/create-kb-dialog";
 
 const statusIconMap: Record<string, LucideIcon> = {
   pending: Clock,
@@ -52,12 +53,7 @@ export default async function KnowledgeBasePage() {
           </p>
         </div>
         <div className="flex gap-2">
-            <Button asChild className="rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950">
-              <Link href="/dashboard/knowledge-base/new">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Knowledge
-              </Link>
-            </Button>
+            <CreateKnowledgeDialog />
         </div>
       </div>
 
@@ -71,12 +67,7 @@ export default async function KnowledgeBasePage() {
              Upload PDFs or provide website URLs to train your voice agents with custom business knowledge.
            </p>
            <div className="mt-8 flex gap-4">
-              <Button asChild variant="outline" className="rounded-xl">
-                <Link href="/dashboard/knowledge-base/new?type=url">Add URL</Link>
-              </Button>
-              <Button asChild className="rounded-xl bg-zinc-900 text-white">
-                <Link href="/dashboard/knowledge-base/new?type=pdf">Upload PDF</Link>
-              </Button>
+              <CreateKnowledgeDialog />
            </div>
         </div>
       ) : (

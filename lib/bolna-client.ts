@@ -49,6 +49,13 @@ export interface PhoneNumber {
   price?: number;
 }
 
+export interface BolnaPhoneNumber {
+  id?: string;
+  phone_number: string;
+  agent_id?: string;
+  telephony_provider?: string;
+}
+
 export interface BuyPhoneNumberPayload {
   phone_number: string;
   country: string;
@@ -77,8 +84,8 @@ export interface BatchExecutionResponse {
 
 export interface KnowledgeBasePayload {
   name: string;
-  file_url?: string;
-  type: "url" | "pdf";
+  url?: string;
+  file?: File | Blob;
 }
 
 export interface KnowledgeBaseResponse {
@@ -113,6 +120,13 @@ export interface ListExecutionsQuery {
   agent_id?: string;
   page?: number;
   page_size?: number;
+}
+
+export interface BolnaProvider {
+  provider_id?: string;
+  provider_name: string;
+  provider_value: string;
+  created_at?: string;
 }
 
 // Voices registered on the Bolna account (GET /me/voices)
@@ -262,6 +276,20 @@ export class BolnaClient {
 
   // ─── Phone Numbers ────────────────────────────────────────────────────────
 
+  async getPhoneNumbers(): Promise<BolnaPhoneNumber[]> {
+    try {
+      const raw = await this.fetchApi<unknown>("/phone-numbers", { method: "GET" });
+      if (Array.isArray(raw)) return raw as BolnaPhoneNumber[];
+      if (raw && typeof raw === "object" && "data" in raw) {
+        return (raw as any).data as BolnaPhoneNumber[];
+      }
+      return [];
+    } catch (error) {
+      console.error("Error fetching phone numbers:", error);
+      return [];
+    }
+  }
+
   async listPhoneNumbers(): Promise<PhoneNumber[]> {
     return this.fetchApi<PhoneNumber[]>("/phone-numbers", { method: "GET" });
   }
@@ -365,10 +393,37 @@ export class BolnaClient {
   async createKnowledgeBase(
     payload: KnowledgeBasePayload
   ): Promise<KnowledgeBaseResponse> {
-    return this.fetchApi<KnowledgeBaseResponse>("/knowledgebase", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
+    const apiKey = this.apiKey;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+
+    try {
+      let res: Response;
+      
+      if (payload.file) {
+        const form = new FormData();
+        form.append("name", payload.name);
+        form.append("file", payload.file);
+
+        res = await fetch(`${this.baseUrl}/knowledgebase`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` }, // NO Content-Type
+          body: form,
+          signal: controller.signal,
+        });
+      } else {
+        res = await fetch(`${this.baseUrl}/knowledgebase`, {
+          method: "POST",
+          headers: this.headers,
+          body: JSON.stringify({ name: payload.name, url: payload.url }),
+          signal: controller.signal,
+        });
+      }
+      
+      return this.handleResponse<KnowledgeBaseResponse>(res, "POST /knowledgebase");
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async listKnowledgeBases(): Promise<KnowledgeBaseResponse[]> {
@@ -404,6 +459,31 @@ export class BolnaClient {
 
   async deleteSipTrunk(trunkId: string): Promise<{ message?: string }> {
     return this.fetchApi<{ message?: string }>(`/sip/${trunkId}`, {
+      method: "DELETE",
+    });
+  }
+
+  // ─── Providers ────────────────────────────────────────────────────────────
+
+  async listProviders(): Promise<BolnaProvider[]> {
+    const raw = await this.fetchApi<unknown>("/providers", { method: "GET" });
+    if (Array.isArray(raw)) return raw as BolnaProvider[];
+    if (raw && typeof raw === "object" && "providers" in raw) {
+      return (raw as any).providers as BolnaProvider[];
+    }
+    return [];
+  }
+
+  async addProvider(provider_name: string, provider_value: string): Promise<BolnaProvider> {
+    return this.fetchApi<BolnaProvider>("/providers", {
+      method: "POST",
+      body: JSON.stringify({ provider_name, provider_value }),
+    });
+  }
+
+  async deleteProvider(provider_name: string): Promise<{ message?: string }> {
+    // Bolna uses the provider_name for deletion in its endpoint paths
+    return this.fetchApi<{ message?: string }>(`/providers/${provider_name}`, {
       method: "DELETE",
     });
   }

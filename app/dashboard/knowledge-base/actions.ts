@@ -13,10 +13,15 @@ const createKnowledgeBaseSchema = z.object({
   name: z.string().min(2, "Name is required"),
   type: z.enum(["url", "pdf"]),
   sourceUrl: z.string().optional(),
+  language: z.string().optional(),
+  file: z.any().optional(),
 });
 
 export async function createKnowledgeBaseAction(formData: FormData) {
   "use server";
+  
+  let redirectPath: string | null = null;
+  
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
@@ -25,14 +30,31 @@ export async function createKnowledgeBaseAction(formData: FormData) {
       name: formData.get("name"),
       type: formData.get("type"),
       sourceUrl: formData.get("sourceUrl") || undefined,
+      language: formData.get("language") || undefined,
     });
+    
+    const file = formData.get("file") as File | null;
 
     // ── Call Bolna KB API ───────────────────────────────────────────────────
-    const bolnaResponse = await bolnaClient.createKnowledgeBase({
-      name: parsed.name,
-      type: parsed.type,
-      file_url: parsed.type === "url" ? parsed.sourceUrl : undefined,
-    });
+    let bolnaResponse;
+    if (parsed.type === "url") {
+      bolnaResponse = await bolnaClient.createKnowledgeBase({
+        name: parsed.name,
+        url: parsed.sourceUrl,
+      });
+    } else if (parsed.type === "pdf") {
+      if (!file || file.size === 0) {
+        throw new Error("A valid PDF file is required.");
+      }
+      bolnaResponse = await bolnaClient.createKnowledgeBase({
+        name: parsed.name,
+        file,
+      });
+    }
+
+    if (!bolnaResponse) {
+      throw new Error("Invalid knowledge base type");
+    }
 
     // ── Persist with auto-filled bolnaKbId ─────────────────────────────────
     await prisma.knowledgeBase.create({
@@ -40,18 +62,20 @@ export async function createKnowledgeBaseAction(formData: FormData) {
         tenantId,
         name: parsed.name,
         type: parsed.type,
-        sourceUrl: parsed.type === "url" ? parsed.sourceUrl : undefined,
+        sourceUrl: parsed.type === "url" ? parsed.sourceUrl : (file?.name || ""),
         bolnaKbId: bolnaResponse.kb_id,
         status: "indexing",
       },
     });
 
     revalidatePath("/dashboard/knowledge-base");
-    redirect("/dashboard/knowledge-base");
+    redirectPath = "/dashboard/knowledge-base";
   } catch (error) {
     console.error("[createKnowledgeBaseAction]:", error);
     throw new Error("Failed to create knowledge base. Please try again.");
   }
+  
+  if (redirectPath) redirect(redirectPath);
 }
 
 export async function deleteKnowledgeBaseAction(formData: FormData) {
