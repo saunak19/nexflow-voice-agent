@@ -60,7 +60,7 @@ export default async function BatchesPage() {
         </div>
       ) : (
         <div className="space-y-4">
-           {batches.map((batch) => {
+           {batches.map((batch:any) => {
              const progress = batch.totalCalls > 0 
                ? Math.round(((batch.completedCalls + batch.failedCalls) / batch.totalCalls) * 100) 
                : 0;

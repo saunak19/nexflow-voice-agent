@@ -5,6 +5,7 @@ import { Plus, User, Users, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MagicCallButton } from "@/components/magic-call-button";
 import { getCurrentTenantId } from "@/lib/tenant";
+import { SyncAgentsButton } from "@/components/sync-agents-button";
 
 export default async function AgentsPage() {
   const session = await auth();
@@ -26,12 +27,15 @@ export default async function AgentsPage() {
             Manage your Bolna voice agents and their configurations.
           </p>
         </div>
-        <Button asChild className="rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200">
-          <Link href="/dashboard/agents/new">
-            <Plus className="mr-2 h-4 w-4" />
-            Create Agent
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <SyncAgentsButton />
+          <Button asChild className="rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200">
+            <Link href="/dashboard/agents/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Create Agent
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {agents.length === 0 ? (
@@ -54,7 +58,7 @@ export default async function AgentsPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {agents.map((agent) => (
+          {agents.map((agent: (typeof agents)[0]) => (
             <div
               key={agent.id}
               className="group relative flex flex-col rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950"

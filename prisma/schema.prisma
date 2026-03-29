@@ -111,6 +111,7 @@ model CallExecution {
   callLogs CallLog[]
 
   @@index([tenantId, createdAt])
+  @@index([bolnaExecutionId])
 }
 
 model CallLog {
@@ -139,6 +140,8 @@ model KnowledgeBase {
   updatedAt DateTime @updatedAt
 
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([bolnaKbId])
 }
 
 model Batch {
@@ -156,6 +159,8 @@ model Batch {
 
   tenant         Tenant   @relation(fields: [tenantId], references: [id])
   agent          Agent    @relation(fields: [agentId], references: [id])
+
+  @@index([bolnaBatchId])
 }
 
 model SipTrunk {
