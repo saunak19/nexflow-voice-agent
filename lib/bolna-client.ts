@@ -179,6 +179,30 @@ export class BolnaClient {
     });
   }
 
+  /** Stop all queued calls for an agent (POST /v2/agent/{id}/stop) */
+  async stopAgentCalls(agentId: string): Promise<{ message?: string }> {
+    return this.fetchApi<{ message?: string }>(`/v2/agent/${agentId}/stop`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  }
+
+  /** List all executions/calls for a specific agent */
+  async listAgentExecutions(agentId: string): Promise<CallStatusResponse[]> {
+    const raw = await this.fetchApi<unknown>(
+      `/v2/agent/${agentId}/executions`,
+      { method: "GET" }
+    );
+    if (Array.isArray(raw)) return raw as CallStatusResponse[];
+    if (raw && typeof raw === "object") {
+      const obj = raw as Record<string, unknown>;
+      for (const key of ["executions", "data", "items", "results"]) {
+        if (Array.isArray(obj[key])) return obj[key] as CallStatusResponse[];
+      }
+    }
+    return [];
+  }
+
   // ─── Voices ───────────────────────────────────────────────────────────────
 
   /**
@@ -436,9 +460,11 @@ export const bolnaClient = new BolnaClient();
 
 export interface CreateAgentParams {
   name: string;
+  welcomeMessage: string;
   prompt: string;
   language: string; // e.g. "hi", "en", "gu"
   voiceId: string;  // The `voice_id` string from GET /me/voices — NOT a display name
+  voiceName: string;
 }
 
 export interface CreateAgentResult {
@@ -461,10 +487,12 @@ export async function createBolnaAgent(
   const payload = {
     agent_config: {
       agent_name: params.name,
+      agent_welcome_message: params.welcomeMessage,
       agent_type: "other",
       tasks: [
         {
           task_type: "conversation",
+          task_config: { incremental_delay: 200 },
           toolchain: {
             execution: "parallel",
             pipelines: [["transcriber", "llm", "synthesizer"]],
@@ -474,8 +502,9 @@ export async function createBolnaAgent(
               agent_type: "simple_llm_agent",
               agent_flow_type: "streaming",
               llm_config: {
-                provider: "azure",
-                model: "gpt-4.1-mini cluster",
+                provider: "openai",
+                model: "gpt-4.1-mini",
+                max_tokens: 150,
                 temperature: 0.2,
               },
             },
@@ -483,12 +512,13 @@ export async function createBolnaAgent(
               provider: "sarvam",
               provider_config: {
                 voice_id: params.voiceId,  // Must be the voice_id from GET /me/voices
-                voice: params.voiceId,     // Bolna platform validator requires this field too
+                // voice: params.voiceId,     // Bolna platform validator requires this field too
+                voice: params.voiceName,
                 model: "bulbul:v2",
                 language: params.language,
               },
               stream: true,
-              buffer_size: 400,            // Sarvam recommended default from source code
+              buffer_size: 250,            // Sarvam recommended default from source code
               audio_format: "wav",
             },
             transcriber: {
@@ -496,6 +526,7 @@ export async function createBolnaAgent(
               model: "saaras:v2.5",
               language: params.language,
               stream: true,
+              endpointing: 200,
             },
             input: {
               provider: "twilio",

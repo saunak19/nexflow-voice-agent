@@ -173,6 +173,26 @@ export default async function NewAgentPage() {
             )}
           </div>
 
+          {/* 3.1 Welcome Message */}
+          <div className="space-y-2 md:col-span-2">
+            <label
+              htmlFor="welcomeMessage"
+              className="text-sm font-semibold text-zinc-700 dark:text-zinc-300"
+            >
+              Welcome message <span className="text-red-500">*</span>
+            </label>
+            <Input
+              id="welcomeMessage"
+              name="welcomeMessage"
+              placeholder="e.g. Hello, I am calling from..."
+              required
+              className="h-11 rounded-xl"
+            />
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              The first thing the agent says when the call connects.
+            </p>
+          </div>
+
           {/* 4. System Prompt — spans full width */}
           <div className="space-y-2 md:col-span-2">
             <label

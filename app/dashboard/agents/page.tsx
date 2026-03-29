@@ -6,6 +6,15 @@ import { Button } from "@/components/ui/button";
 import { MagicCallButton } from "@/components/magic-call-button";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { SyncAgentsButton } from "@/components/sync-agents-button";
+import { DeleteAgentButton } from "./_components/delete-agent-button";
+
+function formatDate(date: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(date));
+}
 
 export default async function AgentsPage() {
   const session = await auth();
@@ -71,22 +80,35 @@ export default async function AgentsPage() {
                   Ready
                 </span>
               </div>
-              <div className="mt-4">
+              <div className="mt-4 flex-1 flex flex-col">
                 <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
                   {agent.name}
                 </h3>
                 <p className="mt-1 text-xs font-mono text-zinc-500 dark:text-zinc-400">
-                  BOLNA ID: {agent.bolnaAgentId}
+                  ID: {agent.bolnaAgentId}
                 </p>
+                {agent.prompt && (
+                  <p className="mt-3 text-sm leading-relaxed text-zinc-600 line-clamp-3 dark:text-zinc-400">
+                    {agent.prompt}
+                  </p>
+                )}
+                <div className="mt-auto pt-4 flex items-center justify-between text-xs font-medium text-zinc-500 dark:text-zinc-500">
+                  <span>Created: {formatDate(agent.createdAt)}</span>
+                  <span>Updated: {formatDate(agent.updatedAt)}</span>
+                </div>
               </div>
               <div className="mt-6 flex flex-col space-y-4">
                  <MagicCallButton agentId={agent.id} tenantId={agent.tenantId} />
-                 <Button asChild variant="ghost" className="w-full justify-start rounded-lg text-xs" size="sm">
-                   <Link href={`/dashboard/agents/${agent.id}`}>
-                     <ExternalLink className="mr-2 h-3 w-3" />
-                     Open Agent Record
-                   </Link>
-                 </Button>
+                 
+                 <div className="flex w-full items-center gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                   <Button asChild variant="outline" className="flex-1 justify-center rounded-lg text-xs" size="sm">
+                     <Link href={`/dashboard/agents/${agent.id}`}>
+                       <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                       Edit
+                     </Link>
+                   </Button>
+                   <DeleteAgentButton localId={agent.id} bolnaId={agent.bolnaAgentId} />
+                 </div>
               </div>
             </div>
           ))}
