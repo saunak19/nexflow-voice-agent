@@ -331,12 +331,16 @@ export class BolnaClient {
   async createBatch(
     agentId: string,
     csvBlob: Blob,
-    metadata: { name?: string } = {}
+    metadata: { name?: string; from_number?: string } = {}
   ): Promise<BatchResponse> {
     const apiKey = this.apiKey; // validate early
     const form = new FormData();
     form.append("agent_id", agentId);
     form.append("file", csvBlob, metadata.name ? `${metadata.name}.csv` : "contacts.csv");
+
+    if (metadata.from_number) {
+      form.append("from_number", metadata.from_number);
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30_000);

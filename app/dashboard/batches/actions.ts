@@ -136,19 +136,38 @@ export async function syncBatchProgressAction(formData: FormData) {
 
 export async function uploadBatchAction(formData: FormData) {
   try {
-    const agentId = formData.get("agentId") as string;
+    const session = await auth();
+    const tenantId = await getCurrentTenantId(session);
+
+    const localAgentId = formData.get("agentId") as string;
     const file = formData.get("file") as File;
     const runType = formData.get("runType") as "now" | "schedule";
     const scheduledAt = formData.get("scheduledAt") as string;
     const webhookUrl = formData.get("webhookUrl") as string;
+    const fromNumber = formData.get("fromNumber") as string;
 
-    if (!agentId) throw new Error("Agent is required.");
+    if (!localAgentId) throw new Error("Agent is required.");
     if (!file || file.size === 0 || !file.name.endsWith('.csv')) {
       throw new Error("A valid .csv file is required.");
     }
 
+    const agent = await prisma.agent.findFirst({
+      where: { id: localAgentId, tenantId },
+      select: { bolnaAgentId: true },
+    });
+    
+    if (!agent) throw new Error("Agent not found.");
+
+    const metadata: { name?: string; from_number?: string } = { 
+      name: file.name.replace(".csv", "") 
+    };
+
+    if (fromNumber && fromNumber !== "bolna_managed") {
+      metadata.from_number = fromNumber;
+    }
+
     // 1. Upload the CSV to create the batch
-    const batchResponse = await bolnaClient.createBatch(agentId, file, { name: file.name });
+    const batchResponse = await bolnaClient.createBatch(agent.bolnaAgentId, file, metadata);
     
     // 2. Schedule the batch if requested
     if (runType === "schedule" && scheduledAt) {
