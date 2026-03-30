@@ -116,6 +116,49 @@ export interface CallStatusResponse {
   recipient_phone_number?: string;
 }
 
+export interface BolnaExecution {
+  id: string;
+  agent_id: string;
+  batch_id?: string;
+  conversation_time?: number;
+  total_cost?: number;
+  cost?: number;
+  status: string;
+  error_message?: string;
+  answered_by_voice_mail?: boolean;
+  transcript?: string;
+  created_at: string;
+  updated_at?: string;
+  telephony_data?: {
+    duration?: number;
+    to_number?: string;
+    from_number?: string;
+    recording_url?: string;
+    call_type?: string;
+    provider?: string;
+    cost?: number;
+  };
+  metrics?: {
+    cost?: number;
+  };
+  cost_breakdown?: {
+    platform?: number;
+    llm?: number;
+    network?: number;
+    synthesizer?: number;
+    transcriber?: number;
+  };
+  recording_url?: string;
+}
+
+export interface BolnaExecutionsResponse {
+  page_number?: number;
+  page_size?: number;
+  total?: number;
+  has_more?: boolean;
+  data: BolnaExecution[];
+}
+
 export interface ListExecutionsQuery {
   agent_id?: string;
   page?: number;
@@ -257,6 +300,27 @@ export class BolnaClient {
     });
   }
 
+  async makeCall(agentId: string, recipientPhoneNumber: string, fromPhoneNumber?: string): Promise<TriggerCallResponse> {
+    const payload: any = {
+      agent_id: agentId,
+      recipient_phone_number: recipientPhoneNumber,
+    };
+    if (fromPhoneNumber) {
+      payload.from_phone_number = fromPhoneNumber;
+    }
+
+    return this.fetchApi<TriggerCallResponse>("/call", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async stopCall(executionId: string): Promise<{ message?: string }> {
+    return this.fetchApi<{ message?: string }>(`/call/${executionId}/stop`, {
+      method: "POST",
+    });
+  }
+
   async getCallStatus(callId: string): Promise<CallStatusResponse> {
     return this.fetchApi<CallStatusResponse>(`/executions/${callId}`, {
       method: "GET",
@@ -274,11 +338,63 @@ export class BolnaClient {
     });
   }
 
+  async getExecutions(
+    agentId?: string,
+    batchId?: string,
+    dateRange?: { start: string; end: string }
+  ): Promise<BolnaExecution[]> {
+    const params = new URLSearchParams();
+    if (dateRange?.start) params.set("from", dateRange.start);
+    if (dateRange?.end) params.set("to", dateRange.end);
+    if (agentId) params.set("agent_id", agentId);
+    
+    // We only need raw data, let's grab the first page with a high limit
+    params.set("page_size", "100");
+    const qs = params.toString() ? `?${params.toString()}` : "";
+
+    try {
+      let raw: unknown;
+      
+      if (batchId) {
+        raw = await this.fetchApi<unknown>(`/batch/${batchId}/executions${qs}`, { method: "GET" });
+      } else if (agentId) {
+        raw = await this.fetchApi<unknown>(`/v2/agent/${agentId}/executions${qs}`, { method: "GET" });
+      } else {
+        throw new Error("getExecutions requires either agentId or batchId");
+      }
+
+      let mapped: any[] = [];
+      // Handle standard paginated wrapper
+      if (typeof raw === "object" && raw !== null && "data" in raw) {
+        mapped = (raw as BolnaExecutionsResponse).data || [];
+      } else if (Array.isArray(raw)) {
+        mapped = raw as BolnaExecution[];
+      }
+      
+      if (mapped.length > 0) {
+        // 1. Log and Inspect the Raw Payload as instructed
+        console.log("[Raw Bolna Execution Payload]:", JSON.stringify(mapped[0], null, 2));
+      }
+
+      // 2. Map exact cost without ANY math manipulations
+      return mapped.map((rawExecution: any) => ({
+        ...rawExecution,
+        // The exact field Bolna provides their true cost in. If total_cost is returning 2.040, 
+        // they might be sending nested telephony_data.cost or just cost. 
+        // We capture them purely without a single math operation.
+        cost: rawExecution.cost || rawExecution.metrics?.cost || rawExecution.telephony_data?.cost || rawExecution.total_cost || 0
+      })) as BolnaExecution[];
+    } catch (err) {
+      console.error("[BolnaClient] getExecutions failed:", err);
+      return [];
+    }
+  }
+
   // ─── Phone Numbers ────────────────────────────────────────────────────────
 
   async getPhoneNumbers(): Promise<BolnaPhoneNumber[]> {
     try {
-      const raw = await this.fetchApi<unknown>("/phone-numbers", { method: "GET" });
+      const raw = await this.fetchApi<unknown>("/phone-numbers/all", { method: "GET" });
       if (Array.isArray(raw)) return raw as BolnaPhoneNumber[];
       if (raw && typeof raw === "object" && "data" in raw) {
         return (raw as any).data as BolnaPhoneNumber[];
@@ -291,7 +407,7 @@ export class BolnaClient {
   }
 
   async listPhoneNumbers(): Promise<PhoneNumber[]> {
-    return this.fetchApi<PhoneNumber[]>("/phone-numbers", { method: "GET" });
+    return this.fetchApi<PhoneNumber[]>("/phone-numbers/all", { method: "GET" });
   }
 
   async searchPhoneNumbers(payload: PhoneNumberSearchPayload): Promise<PhoneNumber[]> {
@@ -319,6 +435,22 @@ export class BolnaClient {
     return this.fetchApi<{ message?: string; status?: string }>(
       `/phone-numbers/${encoded}`,
       { method: "DELETE" }
+    );
+  }
+
+  async importPhoneNumber(
+    provider: string,
+    phoneNumber: string
+  ): Promise<{ message?: string; status?: string; phone_number?: string }> {
+    return this.fetchApi<{ message?: string; status?: string; phone_number?: string }>(
+      "/phone-numbers",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          phone_number: phoneNumber,
+          telephony_provider: provider,
+        }),
+      }
     );
   }
 

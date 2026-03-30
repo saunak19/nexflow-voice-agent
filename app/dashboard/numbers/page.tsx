@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { bolnaClient } from "@/lib/bolna-client";
 import { deletePhoneNumberAction } from "@/app/dashboard/numbers/actions";
+import { ImportNumberModal } from "./_components/import-number-modal";
 
 export default async function NumbersPage() {
   await auth();
@@ -39,7 +40,8 @@ export default async function NumbersPage() {
             Provision and manage your dedicated Bolna AI phone numbers.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
+            <ImportNumberModal />
             <Button asChild className="rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950">
               <Link href="/dashboard/numbers/search">
                 <Plus className="mr-2 h-4 w-4" />

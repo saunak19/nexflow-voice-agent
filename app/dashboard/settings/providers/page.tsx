@@ -12,6 +12,7 @@ const AVAILABLE_PROVIDERS: ProviderDef[] = [
     keys: [
       { name: "TWILIO_ACCOUNT_SID", label: "Account SID" },
       { name: "TWILIO_AUTH_TOKEN", label: "Auth Token", type: "password" },
+      { name: "TWILIO_PHONE_NUMBER", label: "Twilio Phone Number" },
     ],
   },
   {
@@ -91,7 +92,9 @@ export default async function ProvidersPage() {
               >
                 <div>
                   <p className="font-bold text-sm text-zinc-900 dark:text-zinc-100 mb-0.5">{p.provider_name}</p>
-                  <p className="text-xs text-zinc-500 font-mono truncate max-w-[150px]">{p.provider_value}</p>
+                  <p className="text-xs text-zinc-500 font-mono truncate max-w-[200px]">
+                    {p.provider_name.includes("PHONE_NUMBER") ? p.provider_value : "••••••••••••••••" }
+                  </p>
                 </div>
                 <form action={deleteProviderAction}>
                   <input type="hidden" name="provider_name" value={p.provider_name} />

@@ -235,3 +235,104 @@ export async function stopAgentCallsAction(formData: FormData) {
     throw new Error("Failed to stop agent calls. Please try again.");
   }
 }
+
+// ─── Trigger Individual Call ──────────────────────────────────────────────────
+
+export async function makeCallAction(
+  localAgentId: string,
+  phoneNumber: string,
+  fromPhoneNumber?: string
+) {
+  try {
+    const session = await auth();
+    const tenantId = await getCurrentTenantId(session);
+
+    const agent = await prisma.agent.findFirst({
+      where: { id: localAgentId, tenantId },
+      select: { bolnaAgentId: true },
+    });
+
+    if (!agent) {
+      throw new Error("Agent not found.");
+    }
+
+    // Sanitize phone number
+    let cleanNumber = phoneNumber.replace(/[\s\-\(\)]/g, "");
+    if (!cleanNumber.startsWith("+")) {
+      cleanNumber = `+${cleanNumber.replace(/^0+/, "")}`;
+    }
+
+    const e164Regex = /^\+[1-9]\d{1,14}$/;
+    if (!e164Regex.test(cleanNumber)) {
+      throw new Error("Invalid phone number format. Must be E.164 compliant (e.g., +1234567890).");
+    }
+
+    const response = await bolnaClient.makeCall(agent.bolnaAgentId, cleanNumber, fromPhoneNumber);
+
+    return {
+      success: true,
+      callId: response.call_id,
+      bolnaCallId: response.call_id,
+      status: response.status,
+    };
+  } catch (error: any) {
+    console.error("[makeCallAction]:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to trigger call.",
+    };
+  }
+}
+
+// ─── Stop Individual Call ─────────────────────────────────────────────────────
+
+export async function stopCallAction(executionId: string) {
+  try {
+    const session = await auth();
+    // Verify session exists
+    await getCurrentTenantId(session);
+
+    if (!executionId) {
+      throw new Error("Execution ID is required.");
+    }
+
+    await bolnaClient.stopCall(executionId);
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("[stopCallAction]:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to stop call.",
+    };
+  }
+}
+
+// ─── Fetch Executions ─────────────────────────────────────────────────────────
+
+export async function getExecutionsAction(localAgentId: string) {
+  try {
+    const session = await auth();
+    const tenantId = await getCurrentTenantId(session);
+
+    const agent = await prisma.agent.findFirst({
+      where: { id: localAgentId, tenantId },
+      select: { bolnaAgentId: true },
+    });
+
+    if (!agent) {
+      throw new Error("Agent not found.");
+    }
+
+    const executions = await bolnaClient.getExecutions(agent.bolnaAgentId);
+
+    return { success: true, executions };
+  } catch (error: any) {
+    console.error("[getExecutionsAction]:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to fetch executions.",
+      executions: [],
+    };
+  }
+}

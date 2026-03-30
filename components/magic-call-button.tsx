@@ -1,122 +1,157 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, PhoneCall, CheckCircle2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Loader2, PhoneCall, PhoneOff } from "lucide-react";
 import { toast } from "sonner";
+import { makeCallAction, stopCallAction } from "@/app/dashboard/agents/actions";
 
 interface MagicCallButtonProps {
   agentId: string;
-  tenantId: string;
+  tenantId?: string; // Retained to preserve interface/props from consumer components
   fromNumber?: string;
+  phoneNumbers?: { phone_number: string }[];
   userData?: Record<string, string | number | boolean>;
-}
-
-interface TriggerCallResult {
-  success: boolean;
-  callId?: string;
-  bolnaCallId?: string;
-  error?: string;
 }
 
 export function MagicCallButton({
   agentId,
-  tenantId,
-  fromNumber,
-  userData,
+  phoneNumbers = [],
 }: MagicCallButtonProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [lastCallId, setLastCallId] = useState<string | null>(null);
+  const [fromPhoneNumber, setFromPhoneNumber] = useState<string>("");
+  const [status, setStatus] = useState<"idle" | "dialing" | "active" | "stopping">("idle");
+  const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null);
 
-  const handleTriggerCall = async () => {
-    if (!phoneNumber.trim()) {
-      toast.error("Please enter a valid phone number");
+  const handleCall = async () => {
+    if (phoneNumbers.length > 0 && !fromPhoneNumber) {
+      toast.error("Please select a valid 'From Number'");
       return;
     }
 
-    setIsLoading(true);
-    setLastCallId(null);
-
-    try {
-      const response = await fetch("/api/calls/trigger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phoneNumber: phoneNumber.trim(),
-          agentId,
-          tenantId,
-          fromNumber,
-          userData,
-        }),
-      });
-
-      const data = (await response.json()) as TriggerCallResult;
-
-      if (!response.ok) {
-        throw new Error(data.error ?? "Failed to trigger call");
-      }
-
-      if (data.bolnaCallId) {
-        setLastCallId(data.callId ?? null);
-        toast.success(`Call connected! Bolna ID: ${data.bolnaCallId}`, {
-          duration: 6000,
-        });
-      }
-
-      setPhoneNumber("");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "An error occurred";
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
+    if (!phoneNumber.trim()) {
+      toast.error("Please enter a valid recipient phone number");
+      return;
     }
+
+    setStatus("dialing");
+    
+    // Pass fromPhoneNumber to the action
+    const result = await makeCallAction(agentId, phoneNumber, fromPhoneNumber || undefined);
+    
+    if (!result.success || !result.bolnaCallId) {
+      toast.error(result.error || "Failed to initiate call");
+      setStatus("idle");
+      return;
+    }
+
+    toast.success(`Call connected! Session ID: ${result.bolnaCallId}`);
+    setActiveExecutionId(result.bolnaCallId);
+    setStatus("active");
+  };
+
+  const handleStopCall = async () => {
+    if (!activeExecutionId) return;
+
+    setStatus("stopping");
+    const result = await stopCallAction(activeExecutionId);
+
+    if (!result.success) {
+      toast.error(result.error || "Failed to stop call");
+      setStatus("active");
+      return;
+    }
+
+    toast.success("Call ended successfully");
+    setActiveExecutionId(null);
+    setStatus("idle");
+    setPhoneNumber("");
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex w-full items-center space-x-2">
-        <Input
-          type="tel"
-          placeholder="+1 (555) 000-0000"
-          value={phoneNumber}
-          onChange={(e) => setPhoneNumber(e.target.value)}
-          disabled={isLoading}
-          className="flex-1"
-        />
-        <Button
-          onClick={handleTriggerCall}
-          disabled={isLoading || !phoneNumber.trim()}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shrink-0"
+    <div className="space-y-4 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50">
+      <div className="space-y-2 text-sm">
+        <label className="font-semibold text-zinc-700 dark:text-zinc-300">
+          From Number {phoneNumbers.length > 0 && <span className="text-red-500">*</span>}
+        </label>
+        <Select
+          value={fromPhoneNumber}
+          onValueChange={setFromPhoneNumber}
+          disabled={status !== "idle" || phoneNumbers.length === 0}
         >
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Connecting…
-            </>
-          ) : (
-            <>
-              <PhoneCall className="mr-2 h-4 w-4" />
-              Call
-            </>
-          )}
-        </Button>
+          <SelectTrigger className="w-full rounded-xl bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+            <SelectValue placeholder={phoneNumbers.length === 0 ? "No numbers connected" : "Select caller ID..."} />
+          </SelectTrigger>
+          <SelectContent>
+            {phoneNumbers.map((num) => (
+              <SelectItem key={num.phone_number} value={num.phone_number}>
+                {num.phone_number}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {lastCallId && (
-        <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          <span>Call initiated.</span>
-          <Link
-            href={`/dashboard/calls/${lastCallId}`}
-            className="font-semibold underline underline-offset-2"
+      <div className="space-y-2">
+        <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          Recipient
+        </label>
+        <div className="flex w-full items-center space-x-2">
+          <Input
+            type="tel"
+            placeholder="+1 (555) 000-0000"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            disabled={status !== "idle"}
+            className="flex-1 rounded-xl bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800"
+          />
+          
+          {status === "idle" && (
+            <Button
+              onClick={handleCall}
+              disabled={!phoneNumber.trim() || (phoneNumbers.length > 0 && !fromPhoneNumber)}
+              className="rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 font-semibold shrink-0 transition-colors"
+            >
+            <PhoneCall className="mr-2 h-4 w-4" />
+            Call
+          </Button>
+        )}
+
+        {status === "dialing" && (
+          <Button
+            disabled
+            className="rounded-xl bg-amber-500 text-white hover:bg-amber-600 font-semibold shrink-0 opacity-100 transition-colors"
           >
-            View in history →
-          </Link>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Dialing...
+          </Button>
+        )}
+
+        {(status === "active" || status === "stopping") && (
+          <Button
+            onClick={handleStopCall}
+            disabled={status === "stopping"}
+            variant="destructive"
+            className="rounded-xl font-semibold shrink-0 opacity-100 transition-colors"
+          >
+            {status === "stopping" ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <PhoneOff className="mr-2 h-4 w-4" />
+            )}
+            End Call
+          </Button>
+        )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

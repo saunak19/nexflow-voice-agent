@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { UploadCloud, Loader2, Info } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +34,20 @@ export function CreateBatchForm({ agents, phoneNumbers }: { agents: any[], phone
   const [runType, setRunType] = useState("now");
 
   return (
-    <form action={uploadBatchAction} className="space-y-8 animate-in fade-in duration-500">
+    <form 
+      action={async (formData) => {
+        try {
+          await uploadBatchAction(formData);
+        } catch (err: any) {
+          if (err.message === "NEXT_REDIRECT") {
+            toast.success("Batch successfully queued!");
+            throw err;
+          }
+          toast.error(err.message || "Failed to create batch.");
+        }
+      }} 
+      className="space-y-8 animate-in fade-in duration-500"
+    >
       <input type="hidden" name="runType" value={runType} />
       
       {/* Alert / Info Box */}

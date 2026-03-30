@@ -1,122 +1,259 @@
-import Link from "next/link";
+import { Suspense } from "react";
 import prisma from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { getCurrentTenantId } from "@/lib/tenant";
+import { bolnaClient, BolnaExecution } from "@/lib/bolna-client";
+import { ExecutionsTable } from "./_components/executions-table";
+import { ExecutionsFilterBar } from "./_components/executions-filter-bar";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
-  ExternalLink, 
-  Download, 
-  Play,
+  PhoneOutgoing, 
+  Clock, 
+  DollarSign, 
+  Activity,
   CheckCircle2,
-  XCircle,
-  Loader2
+  XCircle
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { formatDistanceToNow } from "date-fns"; // Make sure to install date-fns
 
-const statusColorMap: Record<string, string> = {
-  queued: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  "in-progress": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
-  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-};
+async function getAggregatedExecutions(
+  tenantId: string, 
+  agentId?: string, 
+  batchId?: string, 
+  dateRange?: { start: string; end: string }
+) {
+  // 1. Fetch all local agents for this tenant
+  const agentsList = await prisma.agent.findMany({
+    where: { tenantId },
+    select: { id: true, name: true, bolnaAgentId: true },
+  });
 
-export default async function CallsHistoryPage() {
+  if (agentsList.length === 0) return { executions: [], agentsList };
+
+  let executions: BolnaExecution[] = [];
+
+  // 2. Fetch logic based on searchParams
+  // If batch selected
+  if (batchId && batchId !== "all") {
+    executions = await bolnaClient.getExecutions(undefined, batchId, dateRange);
+  } 
+  // If specific agent selected
+  else if (agentId && agentId !== "all") {
+    const selectedBolnaAgentId = agentsList.find(a => a.id === agentId)?.bolnaAgentId;
+    if (selectedBolnaAgentId) {
+      executions = await bolnaClient.getExecutions(selectedBolnaAgentId, undefined, dateRange);
+    }
+  } 
+  // If no filters (Global Fanout)
+  else {
+    const results = await Promise.all(
+      agentsList.map(agent => bolnaClient.getExecutions(agent.bolnaAgentId, undefined, dateRange))
+    );
+    executions = results.flat();
+  }
+
+  // 3. Sort by desc
+  executions.sort((a, b) => {
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  return { executions, agentsList };
+}
+
+// Format raw seconds into mm:ss seamlessly
+function formatTimeVal(seconds: number) {
+  if (!seconds || seconds <= 0 || isNaN(seconds)) return "0s";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+
+
+// Helper: strip Bolna's flat $2 platform fee, keep only real usage cost
+function getUsageCost(ex: { total_cost?: number; cost_breakdown?: { platform?: number } }): number {
+  const totalCost = Number(ex.total_cost ?? 0);
+  const platformFee = Number(ex.cost_breakdown?.platform ?? 0);
+  const usage = totalCost - platformFee;
+  return usage > 0 ? usage : 0;
+}
+
+export default async function CallsPage({
+  searchParams,
+}: {
+  // In Next.js 15 the App Router passes searchParams as a Promise
+  searchParams: Promise<{ [key: string]: string | undefined }> | { [key: string]: string | undefined };
+}) {
   const session = await auth();
   const tenantId = await getCurrentTenantId(session);
 
-  const executions = await prisma.callExecution.findMany({
-    where: { tenantId },
-    include: { agent: true },
-    orderBy: { createdAt: "desc" },
-    take: 50, // basic pagination placeholder
+  // Always await — harmless in Next 14, required in Next 15
+  const resolvedParams = await Promise.resolve(searchParams);
+  const { agentId, batchId, startDate, endDate } = resolvedParams;
+  const dateRange = (startDate || endDate) ? { start: startDate || "", end: endDate || "" } : undefined;
+
+  const { executions, agentsList } = await getAggregatedExecutions(
+    tenantId,
+    agentId,
+    batchId,
+    dateRange
+  );
+
+  // ─── Derive Metrics ────────────────────────────────────────────────────────
+  const totalExecutions = executions.length;
+  // Sum only real usage cost — Bolna's flat "platform" fee is excluded
+  const totalCost = executions.reduce((sum, exec) => sum + getUsageCost(exec), 0);
+  let totalDuration = 0;
+  let completedCount = 0;
+  let failedCount = 0;
+
+  executions.forEach((ex) => {
+    // 2. Process Duration safely
+    // Priority: telephony_data.duration -> conversation_time -> 0
+    let dur = Number(ex.telephony_data?.duration);
+    if (isNaN(dur) || dur <= 0) dur = Number(ex.conversation_time);
+    if (isNaN(dur) || dur < 0) dur = 0;
+    
+    // Safety check: if raw duration > 500,000, it's virtually guaranteed Bolna sent milliseconds.
+    // Convert to seconds.
+    if (dur > 500000) {
+      dur = Math.floor(dur / 1000);
+    }
+    
+    totalDuration += dur;
+
+    // 3. Process Status
+    const stat = (ex.status || "").toLowerCase();
+    if (stat === "completed") completedCount++;
+    else if (stat === "failed" || stat === "error") failedCount++;
   });
 
+  const avgCost = totalExecutions > 0 ? (totalCost / totalExecutions) : 0;
+  const avgDuration = totalExecutions > 0 ? Math.floor(totalDuration / totalExecutions) : 0;
+  const activeCount = totalExecutions - (completedCount + failedCount);
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex items-center justify-between">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Call History
+            Agent Conversations
           </h1>
           <p className="text-zinc-500 dark:text-zinc-400">
-            Monitor AI call performance and review transcripts.
+            Analytics and complete execution logs across your operations.
           </p>
         </div>
-        <div className="flex gap-2">
-            <Button asChild variant="outline" className="rounded-xl">
-              <Link href="/api/calls/export">
-                <Download className="mr-2 h-4 w-4" />
-                Export CSV
-              </Link>
-            </Button>
-        </div>
+      </div>
+      
+      {/* ─── Filter Bar ─────────────────────────────────────────────────────── */}
+      <ExecutionsFilterBar agents={agentsList.map(a => ({ id: a.id, name: a.name }))} />
+
+      {/* ─── Metric Cards Grid ──────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Card className="rounded-2xl border-zinc-200 shadow-sm dark:border-zinc-800">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+              Total Calls
+            </CardTitle>
+            <PhoneOutgoing className="h-4 w-4 text-zinc-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
+              {totalExecutions}
+            </div>
+            <p className="text-xs text-zinc-500 mt-1">Found in current scope</p>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-zinc-200 shadow-sm dark:border-zinc-800">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+              Total Duration
+            </CardTitle>
+            <Clock className="h-4 w-4 text-zinc-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
+              {formatTimeVal(totalDuration)}
+            </div>
+            <p className="text-xs text-zinc-500 mt-1">
+              Avg: {formatTimeVal(avgDuration)} / call
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-zinc-200 shadow-sm dark:border-zinc-800">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+              Platform Spend
+            </CardTitle>
+            <DollarSign className="h-4 w-4 text-zinc-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
+              ${Number(totalCost).toFixed(3)}
+            </div>
+            <p className="text-xs text-zinc-500 mt-1">
+              Avg: ${Number(avgCost).toFixed(3)} / call
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-zinc-200 shadow-sm dark:border-zinc-800">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-green-600 dark:text-green-500">
+              Successfully Completed
+            </CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums text-green-700 dark:text-green-400">
+              {completedCount}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-zinc-200 shadow-sm dark:border-zinc-800">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-red-600 dark:text-red-500">
+              Failed or Errored
+            </CardTitle>
+            <XCircle className="h-4 w-4 text-red-600 dark:text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums text-red-700 dark:text-red-400">
+              {failedCount}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-zinc-200 shadow-sm dark:border-zinc-800">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+              Active / Queued
+            </CardTitle>
+            <Activity className="h-4 w-4 text-zinc-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
+              {activeCount < 0 ? 0 : activeCount}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-              <tr>
-                <th className="px-6 py-4 font-semibold text-zinc-900 dark:text-zinc-50">AGENT</th>
-                <th className="px-6 py-4 font-semibold text-zinc-900 dark:text-zinc-50">PHONE</th>
-                <th className="px-6 py-4 font-semibold text-zinc-900 dark:text-zinc-50">STATUS</th>
-                <th className="px-6 py-4 font-semibold text-zinc-900 dark:text-zinc-50">DURATION</th>
-                <th className="px-6 py-4 font-semibold text-zinc-900 dark:text-zinc-50">INITIATED</th>
-                <th className="px-6 py-4 font-semibold text-zinc-900 dark:text-zinc-50">ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {executions.length === 0 ? (
-                <tr>
-                   <td colSpan={6} className="px-6 py-12 text-center text-zinc-400">
-                     No call executions found for your tenant.
-                   </td>
-                </tr>
-              ) : (
-                executions.map((execution) => (
-                  <tr key={execution.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-zinc-900 dark:text-zinc-50">
-                      {execution.agent.name}
-                    </td>
-                    <td className="px-6 py-4 font-mono text-zinc-600 dark:text-zinc-400">
-                      {execution.phoneNumber}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${statusColorMap[execution.status] || "bg-zinc-100"}`}>
-                        {execution.status === "in-progress" && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                        {execution.status === "completed" && <CheckCircle2 className="mr-1 h-3 w-3" />}
-                        {execution.status === "failed" && <XCircle className="mr-1 h-3 w-3" />}
-                        {execution.status.charAt(0).toUpperCase() + execution.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-600 dark:text-zinc-400">
-                      {execution.duration ? `${execution.duration}s` : "-"}
-                    </td>
-                    <td className="px-6 py-4 text-zinc-600 dark:text-zinc-400">
-                      {formatDistanceToNow(new Date(execution.createdAt))} ago
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                         {execution.recordingUrl && (
-                             <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800" title="Play Recording">
-                               <a href={execution.recordingUrl} target="_blank" rel="noreferrer">
-                                 <Play className="h-4 w-4" />
-                               </a>
-                             </Button>
-                          )}
-                          <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800" title="View Transcript">
-                            <Link href={`/dashboard/calls/${execution.id}`}>
-                              <ExternalLink className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                       </div>
-                     </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* ─── Executions Data Table ──────────────────────────────────────────── */}
+      <div className="space-y-4 pt-4">
+        <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          Detailed Logs
+        </h2>
+        
+        <Suspense fallback={
+          <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+            <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-zinc-900 dark:border-white"></div>
+          </div>
+        }>
+          <ExecutionsTable data={executions} />
+        </Suspense>
       </div>
     </div>
   );

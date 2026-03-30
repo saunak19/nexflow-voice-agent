@@ -32,3 +32,30 @@ export async function deletePhoneNumberAction(formData: FormData) {
 
   revalidatePath("/dashboard/numbers");
 }
+
+export async function importPhoneNumberAction(formData: FormData) {
+  const provider = String(formData.get("provider") || "twilio");
+  let phoneNumber = String(formData.get("phoneNumber") || "");
+
+  if (!phoneNumber) {
+    throw new Error("Phone number is required");
+  }
+
+  // Strip non-digit, non-plus chars
+  phoneNumber = phoneNumber.replace(/[^\d+]/g, "");
+  
+  // Prepend '+' if missing
+  if (!phoneNumber.startsWith("+")) {
+    phoneNumber = "+" + phoneNumber;
+  }
+
+  // E.164 simplistic validation test
+  const e164Regex = /^\+[1-9]\d{1,14}$/;
+  if (!e164Regex.test(phoneNumber)) {
+    throw new Error("Invalid phone number format. Must be E.164 starting with + and contain only digits (e.g. +14155552671).");
+  }
+
+  await bolnaClient.importPhoneNumber(provider, phoneNumber);
+
+  revalidatePath("/dashboard/numbers");
+}

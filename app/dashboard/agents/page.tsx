@@ -7,6 +7,7 @@ import { MagicCallButton } from "@/components/magic-call-button";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { SyncAgentsButton } from "@/components/sync-agents-button";
 import { DeleteAgentButton } from "./_components/delete-agent-button";
+import { bolnaClient } from "@/lib/bolna-client";
 
 function formatDate(date: Date) {
   return new Intl.DateTimeFormat("en-US", {
@@ -24,6 +25,13 @@ export default async function AgentsPage() {
     where: { tenantId },
     orderBy: { createdAt: "desc" },
   });
+
+  let phoneNumbers: { phone_number: string }[] = [];
+  try {
+    phoneNumbers = await bolnaClient.listPhoneNumbers();
+  } catch (err) {
+    console.error("[AgentsPage] failed to fetch phone numbers:", err);
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -98,7 +106,7 @@ export default async function AgentsPage() {
                 </div>
               </div>
               <div className="mt-6 flex flex-col space-y-4">
-                 <MagicCallButton agentId={agent.id} tenantId={agent.tenantId} />
+                 <MagicCallButton agentId={agent.id} tenantId={agent.tenantId} phoneNumbers={phoneNumbers.map(n => ({ phone_number: n.phone_number }))} />
                  
                  <div className="flex w-full items-center gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                    <Button asChild variant="outline" className="flex-1 justify-center rounded-lg text-xs" size="sm">

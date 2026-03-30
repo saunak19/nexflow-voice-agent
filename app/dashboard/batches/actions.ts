@@ -145,11 +145,70 @@ export async function uploadBatchAction(formData: FormData) {
     const scheduledAt = formData.get("scheduledAt") as string;
     const webhookUrl = formData.get("webhookUrl") as string;
     const fromNumber = formData.get("fromNumber") as string;
+    const countryCode = formData.get("countryCode") as string || "+91";
 
     if (!localAgentId) throw new Error("Agent is required.");
     if (!file || file.size === 0 || !file.name.endsWith('.csv')) {
       throw new Error("A valid .csv file is required.");
     }
+
+    const text = await file.text();
+    const rows = text.split(/\r?\n/);
+    
+    if (rows.length === 0 || !rows[0].trim()) {
+      throw new Error("The uploaded CSV file appears to be empty.");
+    }
+
+    const headerRow = rows[0];
+    const headers = headerRow.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+    
+    // 2. Robust Header Detection
+    const possibleHeaders = ["phone", "phonenumber", "phone_number", "contact", "contactnumber", "contact_number", "mobile", "mobilenumber", "ph"];
+    let phoneColIdx = headers.findIndex(h => possibleHeaders.includes(h.replace(/[^a-z_]/g, '')));
+    
+    // Looser fallback matching
+    if (phoneColIdx === -1) {
+      phoneColIdx = headers.findIndex(h => h.includes("phone") || h.includes("contact") || h.includes("mobile"));
+    }
+
+    if (phoneColIdx === -1) {
+      throw new Error("Could not find a valid phone number column in the CSV. Please ensure you have a header named 'Phone' or 'Contact'.");
+    }
+
+    // 3. Data Mutation
+    const mutatedRows = [headerRow];
+    for (let i = 1; i < rows.length; i++) {
+      const rowStr = rows[i];
+      if (!rowStr.trim()) continue; // Skip empty rows
+
+      const columns = rowStr.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+      if (columns.length > phoneColIdx) {
+        let number = columns[phoneColIdx].trim().replace(/^"|"$/g, '');
+        
+        if (number) {
+          // Strip random spaces, dashes, parentheses
+          number = number.replace(/[\s\-\(\)]/g, '');
+          
+          // Prepend default code if it does not start with +
+          if (!number.startsWith('+')) {
+            // Strip any leading zeros before prepending country code
+            number = `${countryCode}${number.replace(/^0+/, '')}`;
+          }
+
+          const e164Regex = /^\+[1-9]\d{1,14}$/;
+          if (!e164Regex.test(number)) {
+            throw new Error(`Row ${i + 1}: Invalid phone number format '${columns[phoneColIdx]}'. Expected E.164 format (e.g., +919876543210).`);
+          }
+
+          // Update column value with properly formatted E.164 string
+          columns[phoneColIdx] = `"${number}"`;
+        }
+      }
+      mutatedRows.push(columns.join(','));
+    }
+    
+    // 4. Reconstruct the File
+    const fixedFile = new File([mutatedRows.join('\n')], file.name, { type: "text/csv" });
 
     const agent = await prisma.agent.findFirst({
       where: { id: localAgentId, tenantId },
@@ -167,7 +226,7 @@ export async function uploadBatchAction(formData: FormData) {
     }
 
     // 1. Upload the CSV to create the batch
-    const batchResponse = await bolnaClient.createBatch(agent.bolnaAgentId, file, metadata);
+    const batchResponse = await bolnaClient.createBatch(agent.bolnaAgentId, fixedFile, metadata);
     
     // 2. Schedule the batch if requested
     if (runType === "schedule" && scheduledAt) {
@@ -180,6 +239,9 @@ export async function uploadBatchAction(formData: FormData) {
 
   } catch (error) {
     console.error("[uploadBatchAction]:", error);
+    if (error instanceof Error) {
+      throw error;
+    }
     throw new Error("Failed to upload batch. Please try again.");
   }
 

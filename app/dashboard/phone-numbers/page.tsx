@@ -2,7 +2,33 @@ import { bolnaClient } from "@/lib/bolna-client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default async function PhoneNumbersPage() {
-  const phoneNumbers = await bolnaClient.getPhoneNumbers();
+  const [bolnaNumbers, providers] = await Promise.all([
+    bolnaClient.getPhoneNumbers(),
+    bolnaClient.listProviders().catch(() => [])
+  ]);
+
+  const phoneNumbers = [...bolnaNumbers];
+
+  const twilioNumber = providers.find(p => p.provider_name === "TWILIO_PHONE_NUMBER");
+  const vonageNumber = providers.find(p => p.provider_name === "VONAGE_PHONE_NUMBER");
+
+  if (twilioNumber?.provider_value) {
+    phoneNumbers.push({
+      id: "twilio-" + twilioNumber.provider_value,
+      phone_number: twilioNumber.provider_value,
+      telephony_provider: "twilio",
+      agent_id: "",
+    } as any);
+  }
+
+  if (vonageNumber?.provider_value) {
+    phoneNumbers.push({
+      id: "vonage-" + vonageNumber.provider_value,
+      phone_number: vonageNumber.provider_value,
+      telephony_provider: "vonage",
+      agent_id: "",
+    } as any);
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-6xl">
