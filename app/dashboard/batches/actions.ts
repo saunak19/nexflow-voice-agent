@@ -232,6 +232,10 @@ export async function uploadBatchAction(formData: FormData) {
     if (runType === "schedule" && scheduledAt) {
       const isoDate = new Date(scheduledAt).toISOString();
       await bolnaClient.scheduleBatch(batchResponse.batch_id, isoDate);
+    } else if (runType === "now") {
+      const futureDate = new Date();
+      futureDate.setMinutes(futureDate.getMinutes() + 3); // Bolna requires >2 minutes
+      await bolnaClient.scheduleBatch(batchResponse.batch_id, futureDate.toISOString());
     }
 
     // 3. (Optional) Save to local Prisma DB if you track batches locally

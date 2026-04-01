@@ -180,8 +180,10 @@ export function BatchesTable({ batches, agents }: BatchesTableProps) {
                   {batch.workflow || "calls-only"}
                 </TableCell>
                 <TableCell className="text-sm text-zinc-500 dark:text-zinc-400 whitespace-nowrap" suppressHydrationWarning>
-                  {batch.created_at ? new Date(batch.created_at).toLocaleString('en-US', {
-                    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                  {batch.created_at ? new Date(batch.created_at).toLocaleString('en-IN', {
+                    timeZone: 'Asia/Kolkata',
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
                   }) : "-"}
                 </TableCell>
                 <TableCell>
