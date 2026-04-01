@@ -73,6 +73,9 @@ export interface BatchResponse {
   total_calls: number;
   completed_calls?: number;
   failed_calls?: number;
+  file_name?: string;
+  valid_contacts?: number;
+  created_at?: string;
 }
 
 export interface BatchExecutionResponse {
@@ -692,14 +695,121 @@ export interface CreateAgentResult {
  * Separates agent_config (infrastructure) from agent_prompts (LLM instructions)
  * exactly as required by the Bolna v2 API spec.
  */
+// export async function createBolnaAgent(
+//   params: CreateAgentParams
+// ): Promise<CreateAgentResult> {
+//   const apiKey = process.env.BOLNA_API_KEY;
+//   if (!apiKey) throw new Error("Missing BOLNA_API_KEY environment variable");
+
+//   // params.voiceId must be the `voice_id` string returned by GET /me/voices
+//   // (e.g. "anushka" or a UUID depending on the provider's registration in Bolna)
+//   const payload = {
+//     agent_config: {
+//       agent_name: params.name,
+//       agent_welcome_message: params.welcomeMessage,
+//       agent_type: "other",
+//       tasks: [
+//         {
+//           task_type: "conversation",
+//           task_config: { incremental_delay: 200 },
+//           toolchain: {
+//             execution: "parallel",
+//             pipelines: [["transcriber", "llm", "synthesizer"]],
+//           },
+//           tools_config: {
+//             llm_agent: {
+//               agent_type: "simple_llm_agent",
+//               agent_flow_type: "streaming",
+//               llm_config: {
+//                 provider: "openai",
+//                 model: "gpt-4.1-mini",
+//                 max_tokens: 150,
+//                 temperature: 0.2,
+//               },
+//             },
+//             synthesizer: {
+//               provider: "sarvam",
+//               provider_config: {
+//                 voice_id: params.voiceId,  // Must be the voice_id from GET /me/voices
+//                 // voice: params.voiceId,     // Bolna platform validator requires this field too
+//                 voice: params.voiceName,
+//                 model: "bulbul:v2",
+//                 language: params.language,
+//               },
+//               stream: true,
+//               buffer_size: 250,            // Sarvam recommended default from source code
+//               audio_format: "wav",
+//             },
+//             transcriber: {
+//               provider: "sarvam",
+//               model: "saaras:v2.5",
+//               language: params.language,
+//               stream: true,
+//               endpointing: 200,
+//             },
+//             input: {
+//               provider: "twilio",
+//               format: "wav",
+//             },
+//             output: {
+//               provider: "twilio",
+//               format: "wav",
+//             },
+//           },
+//         },
+//       ],
+//     },
+//     agent_prompts: {
+//       task_1: {
+//         system_prompt: params.prompt,
+//       },
+//     },
+//   };
+
+//   const controller = new AbortController();
+//   const timeout = setTimeout(() => controller.abort(), 20_000);
+
+//   try {
+//     const res = await fetch("https://api.bolna.ai/v2/agent", {
+//       method: "POST",
+//       headers: {
+//         Authorization: `Bearer ${apiKey}`,
+//         "Content-Type": "application/json",
+//       },
+//       body: JSON.stringify(payload),
+//       signal: controller.signal,
+//     });
+
+//     if (!res.ok) {
+//       let detail = "";
+//       try {
+//         const err = await res.json();
+//         detail = JSON.stringify(err);
+//       } catch {
+//         detail = await res.text().catch(() => "");
+//       }
+//       console.error(`[createBolnaAgent] ${res.status}: ${detail}`);
+//       throw new Error(
+//         `Bolna API error ${res.status} on POST /v2/agent: ${detail || res.statusText}`
+//       );
+//     }
+
+//     const data = (await res.json()) as { agent_id: string };
+//     if (!data.agent_id) {
+//       throw new Error("Bolna did not return an agent_id in the response");
+//     }
+//     return { agent_id: data.agent_id };
+//   } finally {
+//     clearTimeout(timeout);
+//   }
+// }
+
 export async function createBolnaAgent(
   params: CreateAgentParams
 ): Promise<CreateAgentResult> {
   const apiKey = process.env.BOLNA_API_KEY;
   if (!apiKey) throw new Error("Missing BOLNA_API_KEY environment variable");
 
-  // params.voiceId must be the `voice_id` string returned by GET /me/voices
-  // (e.g. "anushka" or a UUID depending on the provider's registration in Bolna)
   const payload = {
     agent_config: {
       agent_name: params.name,
@@ -708,7 +818,8 @@ export async function createBolnaAgent(
       tasks: [
         {
           task_type: "conversation",
-          task_config: { incremental_delay: 200 },
+          // Reduced artificial delay to 100 or 0 (100 is safer for stability)
+          task_config: { incremental_delay: 100,voicemail: true,noise_cancellation: true }, 
           toolchain: {
             execution: "parallel",
             pipelines: [["transcriber", "llm", "synthesizer"]],
@@ -716,25 +827,26 @@ export async function createBolnaAgent(
           tools_config: {
             llm_agent: {
               agent_type: "simple_llm_agent",
-              agent_flow_type: "streaming",
+              agent_flow_type: "streaming", // Ensures text streams immediately
               llm_config: {
                 provider: "openai",
-                model: "gpt-4.1-mini",
+                model: "gpt-4o-mini", // CHANGED: Fastest OpenAI model for voice
                 max_tokens: 150,
-                temperature: 0.2,
+                temperature: 0.2, // CHANGED: Slightly higher for more natural, less robotic text
               },
             },
             synthesizer: {
               provider: "sarvam",
               provider_config: {
-                voice_id: params.voiceId,  // Must be the voice_id from GET /me/voices
-                // voice: params.voiceId,     // Bolna platform validator requires this field too
+                voice_id: params.voiceId,
                 voice: params.voiceName,
                 model: "bulbul:v2",
                 language: params.language,
               },
               stream: true,
-              buffer_size: 250,            // Sarvam recommended default from source code
+              // CHANGED: Drastically reduced buffer. 
+              // Now it will speak almost immediately when the LLM generates a few words.
+              buffer_size: 80, 
               audio_format: "wav",
             },
             transcriber: {
@@ -742,7 +854,8 @@ export async function createBolnaAgent(
               model: "saaras:v2.5",
               language: params.language,
               stream: true,
-              endpointing: 200,
+              // CHANGED: Increased to 300ms so it doesn't interrupt you unnaturally
+              endpointing: 300, 
             },
             input: {
               provider: "twilio",
@@ -800,4 +913,3 @@ export async function createBolnaAgent(
     clearTimeout(timeout);
   }
 }
-
