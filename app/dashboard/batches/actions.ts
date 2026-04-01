@@ -248,3 +248,52 @@ export async function uploadBatchAction(formData: FormData) {
   revalidatePath("/dashboard/batches");
   redirect("/dashboard/batches");
 }
+
+export async function deleteBatchAction(batchId: string) {
+  try {
+    const session = await auth();
+    const tenantId = await getCurrentTenantId(session);
+
+    await bolnaClient.deleteBatch(batchId);
+
+    await prisma.batch.deleteMany({
+      where: { bolnaBatchId: batchId, tenantId },
+    });
+
+    revalidatePath("/dashboard/batches");
+    return { success: true };
+  } catch (error) {
+    console.error("[deleteBatchAction]:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Failed to delete batch. Please try again." };
+  }
+}
+
+export async function runBatchNowAction(batchId: string) {
+  try {
+    const futureDate = new Date();
+    futureDate.setMinutes(futureDate.getMinutes() + 3); // Bolna requires >2 minutes
+    
+    await bolnaClient.scheduleBatch(batchId, futureDate.toISOString());
+    // Also trigger revalidation
+    revalidatePath("/dashboard/batches");
+    return { success: true };
+  } catch (error) {
+    console.error("[runBatchNowAction]:", error);
+    return { success: false, error: "Failed to run batch. Please try again." };
+  }
+}
+
+export async function stopBatchAction(batchId: string) {
+  try {
+    await bolnaClient.stopBatch(batchId);
+    revalidatePath("/dashboard/batches");
+    return { success: true };
+  } catch (error) {
+    console.error("[stopBatchAction]:", error);
+    return { success: false, error: "Failed to stop batch. Please try again." };
+  }
+}
+
+export async function getBatchCallLogUrl(batchId: string) {
+  return `https://api.bolna.ai/batches/${batchId}/executions/download`;
+}

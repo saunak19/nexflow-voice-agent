@@ -75,7 +75,10 @@ export interface BatchResponse {
   failed_calls?: number;
   file_name?: string;
   valid_contacts?: number;
+  workflow?: string;
   created_at?: string;
+  name?: string;
+  execution_status?: Record<string, number>;
 }
 
 export interface BatchExecutionResponse {
@@ -499,7 +502,12 @@ export class BolnaClient {
   ): Promise<{ message?: string }> {
     const apiKey = this.apiKey;
     const form = new FormData();
-    form.append("scheduled_at", scheduledAt);
+    // Python's datetime.fromisoformat() fails with "Z" and milliseconds.
+    // Clean it to format: YYYY-MM-DDTHH:mm:ss+00:00
+    const safeIsoDate = new Date(scheduledAt).toISOString().split('.')[0] + '+00:00';
+    
+    form.append("scheduled_at", safeIsoDate);
+    
     const res = await fetch(`${this.baseUrl}/batches/${batchId}/schedule`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}` },
@@ -525,6 +533,40 @@ export class BolnaClient {
       `/batches/${batchId}/executions`,
       { method: "GET" }
     );
+  }
+
+  // List all batches for a specific agent
+  async listBatchesForAgent(agentId: string): Promise<BatchResponse[]> {
+    try {
+      const raw = await this.fetchApi<any[]>(`/batches/${agentId}/all`, { method: "GET" });
+      if (Array.isArray(raw)) {
+        return raw.map((r: any) => ({
+          batch_id: r.batch_id,
+          status: r.status,
+          agent_id: agentId,
+          total_calls: r.total_contacts || r.total_calls || 0,
+          completed_calls: r.execution_status?.completed || 0,
+          failed_calls: (r.execution_status?.failed || 0) + (r.execution_status?.['no-answer'] || 0),
+          file_name: r.file_name,
+          valid_contacts: r.valid_contacts,
+          workflow: "calls-only",
+          created_at: r.created_at,
+          name: r.file_name,
+          execution_status: r.execution_status
+        }));
+      }
+      return [];
+    } catch { return []; }
+  }
+
+  // Delete a batch
+  async deleteBatch(batchId: string): Promise<{ message?: string }> {
+    return this.fetchApi<{ message?: string }>(`/batches/${batchId}`, { method: "DELETE" });
+  }
+
+  // Run a stopped batch now (re-schedule immediately)
+  async runBatchNow(batchId: string): Promise<{ message?: string }> {
+    return this.fetchApi<{ message?: string }>(`/batches/${batchId}/run`, { method: "POST" });
   }
 
   // ─── Knowledge Base ───────────────────────────────────────────────────────
@@ -631,7 +673,8 @@ export class BolnaClient {
 
   private async handleResponse<T>(
     response: Response,
-    context: string
+    context: string,
+    options?: { suppressLog?: boolean }
   ): Promise<T> {
     if (!response.ok) {
       let detail = "";
@@ -641,7 +684,11 @@ export class BolnaClient {
       } catch {
         detail = await response.text().catch(() => "");
       }
-      console.error(`[BolnaClient] ${context} → ${response.status}: ${detail}`);
+      
+      if (!options?.suppressLog) {
+        console.error(`[BolnaClient] ${context} → ${response.status}: ${detail}`);
+      }
+      
       throw new Error(
         `Bolna API error ${response.status} on ${context}: ${detail || response.statusText}`
       );
@@ -653,7 +700,7 @@ export class BolnaClient {
 
   private async fetchApi<T>(
     endpoint: string,
-    options: RequestInit & { signal?: AbortSignal } = {}
+    options: RequestInit & { signal?: AbortSignal; suppressLog?: boolean } = {}
   ): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20_000);
@@ -666,7 +713,7 @@ export class BolnaClient {
         },
         signal: options.signal ?? controller.signal,
       });
-      return this.handleResponse<T>(res, `${options.method ?? "GET"} ${endpoint}`);
+      return this.handleResponse<T>(res, `${options.method ?? "GET"} ${endpoint}`, { suppressLog: options.suppressLog });
     } finally {
       clearTimeout(timeout);
     }
