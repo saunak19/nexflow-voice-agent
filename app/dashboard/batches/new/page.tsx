@@ -4,7 +4,7 @@ import prisma from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { CreateBatchForm } from "./_components/create-batch-form";
-import { bolnaClient } from "@/lib/bolna-client";
+import { listTenantPhoneNumbers } from "@/lib/tenant-phone-numbers";
 export default async function NewBatchPage() {
   const session = await auth();
   const tenantId = await getCurrentTenantId(session);
@@ -17,7 +17,7 @@ export default async function NewBatchPage() {
 
   let phoneNumbers: { phone_number: string }[] = [];
   try {
-    phoneNumbers = await bolnaClient.listPhoneNumbers();
+    phoneNumbers = await listTenantPhoneNumbers(tenantId);
   } catch (e) {
     phoneNumbers = [];
   }

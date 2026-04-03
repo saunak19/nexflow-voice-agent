@@ -110,20 +110,19 @@ export function CreateBatchForm({ agents, phoneNumbers }: { agents: any[], phone
           <Label className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
             Calls will be made via Twilio using:
           </Label>
-          <Select name="fromNumber" defaultValue="bolna_managed">
-            <SelectTrigger className="h-11 rounded-xl">
-              <SelectValue placeholder="Bolna managed phone numbers" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="bolna_managed">Bolna managed phone numbers</SelectItem>
-              <SelectItem value="agent_owned">Agent owned phone numbers</SelectItem>
-              {phoneNumbers.map((n) => (
-                <SelectItem key={n.phone_number} value={n.phone_number}>
-                  {n.phone_number}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+         <Select name="fromNumber" defaultValue="">
+  <SelectTrigger className="h-11 rounded-xl">
+    <SelectValue placeholder="Select a phone number" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="bolna_managed">Bolna managed numbers</SelectItem>
+    {phoneNumbers.map((n) => (
+      <SelectItem key={n.phone_number} value={n.phone_number}>
+        {n.phone_number}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
         </div>
 
         {/* Execution Tabs */}

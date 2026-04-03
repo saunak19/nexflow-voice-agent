@@ -1,34 +1,12 @@
-import { bolnaClient } from "@/lib/bolna-client";
+import { auth } from "@/lib/auth";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { getCurrentTenantId } from "@/lib/tenant";
+import { listTenantPhoneNumbers } from "@/lib/tenant-phone-numbers";
 
 export default async function PhoneNumbersPage() {
-  const [bolnaNumbers, providers] = await Promise.all([
-    bolnaClient.getPhoneNumbers(),
-    bolnaClient.listProviders().catch(() => [])
-  ]);
-
-  const phoneNumbers = [...bolnaNumbers];
-
-  const twilioNumber = providers.find(p => p.provider_name === "TWILIO_PHONE_NUMBER");
-  const vonageNumber = providers.find(p => p.provider_name === "VONAGE_PHONE_NUMBER");
-
-  if (twilioNumber?.provider_value) {
-    phoneNumbers.push({
-      id: "twilio-" + twilioNumber.provider_value,
-      phone_number: twilioNumber.provider_value,
-      telephony_provider: "twilio",
-      agent_id: "",
-    } as any);
-  }
-
-  if (vonageNumber?.provider_value) {
-    phoneNumbers.push({
-      id: "vonage-" + vonageNumber.provider_value,
-      phone_number: vonageNumber.provider_value,
-      telephony_provider: "vonage",
-      agent_id: "",
-    } as any);
-  }
+  const session = await auth();
+  const tenantId = await getCurrentTenantId(session);
+  const phoneNumbers = await listTenantPhoneNumbers(tenantId);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-6xl">
@@ -67,16 +45,16 @@ export default async function PhoneNumbersPage() {
                 </TableRow>
               ) : (
                 phoneNumbers.map((num, idx) => (
-                  <TableRow key={num.id || idx}>
+                  <TableRow key={num.phone_number || idx}>
                     <TableCell className="font-medium">{num.phone_number}</TableCell>
                     <TableCell className="text-zinc-500">
-                      {num.agent_id ? num.agent_id : "-"}
+                      -
                     </TableCell>
                     <TableCell className="text-zinc-500">
-                      {num.telephony_provider || "twilio"}
+                      {num.telephony_provider || "bolna"}
                     </TableCell>
                     <TableCell className="text-zinc-500">
-                      {num.agent_id ? "Unlink" : "n/a"}
+                      n/a
                     </TableCell>
                   </TableRow>
                 ))

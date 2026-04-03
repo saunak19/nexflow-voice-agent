@@ -7,7 +7,19 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/db";
 import { getCurrentTenantId } from "@/lib/tenant";
-import { bolnaClient, createBolnaAgent } from "@/lib/bolna-client";
+import { assertTenantOwnsPhoneNumber, normalizePhoneNumber } from "@/lib/tenant-phone-numbers";
+import { getTenantVoiceProvider } from "@/lib/voice-providers";
+
+function extractCallIdentifier(response: unknown) {
+  if (!response || typeof response !== "object") {
+    return undefined;
+  }
+
+  const candidate = response as Record<string, unknown>;
+  const possibleId = candidate.call_id ?? candidate.callId ?? candidate.execution_id ?? candidate.executionId ?? candidate.id;
+
+  return typeof possibleId === "string" && possibleId.trim() ? possibleId : undefined;
+}
 
 // ─── Create Agent ─────────────────────────────────────────────────────────────
 
@@ -29,6 +41,7 @@ export async function createAgentAction(formData: FormData) {
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
 
     const parsed = createAgentSchema.parse({
       name: formData.get("name"),
@@ -39,7 +52,7 @@ export async function createAgentAction(formData: FormData) {
     });
 
     // ── Validate the voice_id against real registered voices from Bolna ───────
-    const availableVoices = await bolnaClient.listVoices();
+    const availableVoices = await voiceProvider.listVoices();
     const selectedVoice = availableVoices.find(
       (v) => v.voice_id === parsed.voiceId && v.provider === "sarvam"
     );
@@ -54,7 +67,7 @@ export async function createAgentAction(formData: FormData) {
     }
 
     // ── Create the fully-configured agent in Bolna ─────────────────────────
-    const { agent_id: bolnaAgentId } = await createBolnaAgent({
+    const { agent_id: bolnaAgentId } = await voiceProvider.createAgent({
       name: parsed.name,
       welcomeMessage: parsed.welcomeMessage,
       prompt: parsed.prompt,
@@ -99,8 +112,9 @@ export async function syncAgentsAction(): Promise<{ synced: number; total: numbe
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
 
-    const bolnaAgents = await bolnaClient.listAgents();
+    const bolnaAgents = await voiceProvider.listAgents();
     let synced = 0;
 
     for (const bolnaAgent of bolnaAgents) {
@@ -139,6 +153,7 @@ export async function deleteAgentAction(localAgentId: string, bolnaAgentId: stri
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
 
     const agent = await prisma.agent.findFirst({ where: { id: localAgentId, tenantId } });
     if (!agent) throw new Error("Agent not found");
@@ -146,7 +161,7 @@ export async function deleteAgentAction(localAgentId: string, bolnaAgentId: stri
     // Best-effort delete from Bolna
     try {
       if (bolnaAgentId) {
-        await bolnaClient.deleteAgent(bolnaAgentId);
+        await voiceProvider.deleteAgent(bolnaAgentId);
       }
     } catch (bolnaErr: any) {
       if (bolnaErr?.message?.includes("404")) {
@@ -180,6 +195,7 @@ export async function updateAgentAction(formData: FormData) {
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
 
     const parsed = updateAgentSchema.parse({
       id: formData.get("id"),
@@ -193,8 +209,8 @@ export async function updateAgentAction(formData: FormData) {
     if (!agent) throw new Error("Agent not found");
 
     // ── Update Bolna (name + system prompt) ───────────────────────────────
-    await bolnaClient.updateAgent(agent.bolnaAgentId, {
-      agent_config: { agent_name: parsed.name } as never,
+    await voiceProvider.updateAgent(agent.bolnaAgentId, {
+      agent_config: { agent_name: parsed.name },
       agent_prompts: { task_1: { system_prompt: parsed.prompt } },
     });
 
@@ -222,12 +238,13 @@ export async function stopAgentCallsAction(formData: FormData) {
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
     const id = String(formData.get("id") ?? "");
 
     const agent = await prisma.agent.findFirst({ where: { id, tenantId } });
     if (!agent) throw new Error("Agent not found");
 
-    await bolnaClient.stopAgentCalls(agent.bolnaAgentId);
+    await voiceProvider.stopAgentCalls(agent.bolnaAgentId);
 
     revalidatePath(`/dashboard/agents/${id}`);
   } catch (error) {
@@ -246,6 +263,7 @@ export async function makeCallAction(
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
 
     const agent = await prisma.agent.findFirst({
       where: { id: localAgentId, tenantId },
@@ -256,24 +274,22 @@ export async function makeCallAction(
       throw new Error("Agent not found.");
     }
 
-    // Sanitize phone number
-    let cleanNumber = phoneNumber.replace(/[\s\-\(\)]/g, "");
-    if (!cleanNumber.startsWith("+")) {
-      cleanNumber = `+${cleanNumber.replace(/^0+/, "")}`;
+    if (fromPhoneNumber) {
+      const normalizedFromPhoneNumber = normalizePhoneNumber(fromPhoneNumber);
+      await assertTenantOwnsPhoneNumber(tenantId, normalizedFromPhoneNumber);
+      fromPhoneNumber = normalizedFromPhoneNumber;
     }
 
-    const e164Regex = /^\+[1-9]\d{1,14}$/;
-    if (!e164Regex.test(cleanNumber)) {
-      throw new Error("Invalid phone number format. Must be E.164 compliant (e.g., +1234567890).");
-    }
+    const cleanNumber = normalizePhoneNumber(phoneNumber);
 
-    const response = await bolnaClient.makeCall(agent.bolnaAgentId, cleanNumber, fromPhoneNumber);
+    const response = await voiceProvider.makeCall(agent.bolnaAgentId, cleanNumber, fromPhoneNumber);
+    const callIdentifier = extractCallIdentifier(response);
 
     return {
       success: true,
-      callId: response.call_id,
-      bolnaCallId: response.call_id,
-      status: response.status,
+      callId: callIdentifier,
+      bolnaCallId: callIdentifier,
+      status: response.status ?? "initiated",
     };
   } catch (error: any) {
     console.error("[makeCallAction]:", error);
@@ -289,14 +305,14 @@ export async function makeCallAction(
 export async function stopCallAction(executionId: string) {
   try {
     const session = await auth();
-    // Verify session exists
-    await getCurrentTenantId(session);
+    const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
 
     if (!executionId) {
       throw new Error("Execution ID is required.");
     }
 
-    await bolnaClient.stopCall(executionId);
+    await voiceProvider.stopCall(executionId);
 
     return { success: true };
   } catch (error: any) {
@@ -314,6 +330,7 @@ export async function getExecutionsAction(localAgentId: string) {
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
 
     const agent = await prisma.agent.findFirst({
       where: { id: localAgentId, tenantId },
@@ -324,7 +341,7 @@ export async function getExecutionsAction(localAgentId: string) {
       throw new Error("Agent not found.");
     }
 
-    const executions = await bolnaClient.getExecutions(agent.bolnaAgentId);
+    const executions = await voiceProvider.getExecutions(agent.bolnaAgentId);
 
     return { success: true, executions };
   } catch (error: any) {

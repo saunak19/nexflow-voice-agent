@@ -23,7 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Link from "next/link";
-import { BatchResponse } from "@/lib/bolna-client";
+import type { VoiceProviderBatch } from "@/lib/voice-providers";
 
 import {
   deleteBatchAction,
@@ -32,8 +32,57 @@ import {
 } from "../actions";
 
 interface BatchesTableProps {
-  batches: BatchResponse[];
+  batches: VoiceProviderBatch[];
   agents: { id: string; name: string; bolnaAgentId: string }[];
+}
+
+function parseBatchTimestamp(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const hasExplicitTimezone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(trimmed);
+  const normalized = trimmed.includes(" ") ? trimmed.replace(" ", "T") : trimmed;
+  const asDate = new Date(hasExplicitTimezone ? normalized : `${normalized}Z`);
+
+  return Number.isNaN(asDate.getTime()) ? null : asDate;
+}
+
+function formatBatchDateTime(value?: string | null) {
+  const parsed = parseBatchTimestamp(value);
+  if (!parsed) {
+    return "-";
+  }
+
+  return parsed.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function formatBatchStatus(status: string) {
+  const normalizedStatus = status.trim();
+  const lowerStatus = normalizedStatus.toLowerCase();
+  const prefix = "scheduled to run ";
+
+  if (!lowerStatus.startsWith(prefix)) {
+    return normalizedStatus;
+  }
+
+  const scheduledFor = normalizedStatus.slice(prefix.length).trim();
+  const formattedTimestamp = formatBatchDateTime(scheduledFor);
+
+  if (formattedTimestamp === "-") {
+    return normalizedStatus;
+  }
+
+  return `Scheduled for ${formattedTimestamp} IST`;
 }
 
 export function BatchesTable({ batches, agents }: BatchesTableProps) {
@@ -173,18 +222,14 @@ export function BatchesTable({ batches, agents }: BatchesTableProps) {
                 </TableCell>
                 <TableCell>
                   <Badge className={`uppercase text-[10px] tracking-wider font-bold border-transparent ${getStatusBadgeVariant(batch.status)}`}>
-                    {batch.status}
+                    {formatBatchStatus(batch.status)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
                   {batch.workflow || "calls-only"}
                 </TableCell>
                 <TableCell className="text-sm text-zinc-500 dark:text-zinc-400 whitespace-nowrap" suppressHydrationWarning>
-                  {batch.created_at ? new Date(batch.created_at).toLocaleString('en-IN', {
-                    timeZone: 'Asia/Kolkata',
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  }) : "-"}
+                  {formatBatchDateTime(batch.created_at)}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">

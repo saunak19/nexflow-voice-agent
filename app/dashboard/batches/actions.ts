@@ -7,7 +7,8 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/db";
 import { getCurrentTenantId } from "@/lib/tenant";
-import { bolnaClient } from "@/lib/bolna-client";
+import { assertTenantOwnsPhoneNumber, normalizePhoneNumber } from "@/lib/tenant-phone-numbers";
+import { getTenantVoiceProvider } from "@/lib/voice-providers";
 
 const createBatchSchema = z.object({
   name: z.string().min(2, "Name is required"),
@@ -19,6 +20,7 @@ export async function createBatchAction(formData: FormData) {
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
 
     const parsed = createBatchSchema.parse({
       name: formData.get("name"),
@@ -41,7 +43,7 @@ export async function createBatchAction(formData: FormData) {
     }
 
     // ── Call Bolna to create the batch ──────────────────────────────────────
-    const bolnaResponse = await bolnaClient.createBatch(
+    const bolnaResponse = await voiceProvider.createBatch(
       agent.bolnaAgentId,
       csvFile,
       { name: parsed.name }
@@ -72,6 +74,7 @@ export async function toggleBatchStatusAction(formData: FormData) {
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
     const id = String(formData.get("id") ?? "");
     const nextStatus = String(formData.get("nextStatus") ?? "queued");
 
@@ -87,9 +90,9 @@ export async function toggleBatchStatusAction(formData: FormData) {
 
     // ── Call Bolna first ────────────────────────────────────────────────────
     if (nextStatus === "stopped") {
-      await bolnaClient.stopBatch(batch.bolnaBatchId);
+      await voiceProvider.stopBatch(batch.bolnaBatchId);
     } else if (nextStatus === "in-progress") {
-      await bolnaClient.scheduleBatch(batch.bolnaBatchId, new Date().toISOString());
+      await voiceProvider.scheduleBatch(batch.bolnaBatchId, new Date().toISOString());
     }
 
     // ── Update Prisma only after successful Bolna call ─────────────────────
@@ -110,12 +113,13 @@ export async function syncBatchProgressAction(formData: FormData) {
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
     const id = String(formData.get("id") ?? "");
 
     const batch = await prisma.batch.findFirst({ where: { id, tenantId } });
     if (!batch || !batch.bolnaBatchId) throw new Error("Batch not synced");
 
-    const batchData = await bolnaClient.getBatch(batch.bolnaBatchId);
+    const batchData = await voiceProvider.getBatch(batch.bolnaBatchId);
 
     await prisma.batch.update({
       where: { id: batch.id },
@@ -138,6 +142,7 @@ export async function uploadBatchAction(formData: FormData) {
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
 
     const localAgentId = formData.get("agentId") as string;
     const file = formData.get("file") as File;
@@ -217,25 +222,28 @@ export async function uploadBatchAction(formData: FormData) {
     
     if (!agent) throw new Error("Agent not found.");
 
-    const metadata: { name?: string; from_number?: string } = { 
-      name: file.name.replace(".csv", "") 
+    const metadata: { name?: string; from_number?: string } = {
+      name: file.name.replace(".csv", ""),
     };
 
-    if (fromNumber && fromNumber !== "bolna_managed") {
-      metadata.from_number = fromNumber;
+    if (fromNumber && fromNumber !== "bolna_managed" && fromNumber !== "agent_owned") {
+      const normalizedFromNumber = normalizePhoneNumber(fromNumber);
+      await assertTenantOwnsPhoneNumber(tenantId, normalizedFromNumber);
+      metadata.from_number = normalizedFromNumber;
+      console.log("[uploadBatchAction] Using from_number:", normalizedFromNumber);
     }
 
     // 1. Upload the CSV to create the batch
-    const batchResponse = await bolnaClient.createBatch(agent.bolnaAgentId, fixedFile, metadata);
+    const batchResponse = await voiceProvider.createBatch(agent.bolnaAgentId, fixedFile, metadata);
     
     // 2. Schedule the batch if requested
     if (runType === "schedule" && scheduledAt) {
       const isoDate = new Date(scheduledAt).toISOString();
-      await bolnaClient.scheduleBatch(batchResponse.batch_id, isoDate);
+      await voiceProvider.scheduleBatch(batchResponse.batch_id, isoDate);
     } else if (runType === "now") {
       const futureDate = new Date();
       futureDate.setMinutes(futureDate.getMinutes() + 3); // Bolna requires >2 minutes
-      await bolnaClient.scheduleBatch(batchResponse.batch_id, futureDate.toISOString());
+      await voiceProvider.scheduleBatch(batchResponse.batch_id, futureDate.toISOString());
     }
 
     // 3. (Optional) Save to local Prisma DB if you track batches locally
@@ -257,8 +265,9 @@ export async function deleteBatchAction(batchId: string) {
   try {
     const session = await auth();
     const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
 
-    await bolnaClient.deleteBatch(batchId);
+    await voiceProvider.deleteBatch(batchId);
 
     await prisma.batch.deleteMany({
       where: { bolnaBatchId: batchId, tenantId },
@@ -274,10 +283,11 @@ export async function deleteBatchAction(batchId: string) {
 
 export async function runBatchNowAction(batchId: string) {
   try {
+    const voiceProvider = await getTenantVoiceProvider();
     const futureDate = new Date();
     futureDate.setMinutes(futureDate.getMinutes() + 3); // Bolna requires >2 minutes
     
-    await bolnaClient.scheduleBatch(batchId, futureDate.toISOString());
+    await voiceProvider.scheduleBatch(batchId, futureDate.toISOString());
     // Also trigger revalidation
     revalidatePath("/dashboard/batches");
     return { success: true };
@@ -289,7 +299,8 @@ export async function runBatchNowAction(batchId: string) {
 
 export async function stopBatchAction(batchId: string) {
   try {
-    await bolnaClient.stopBatch(batchId);
+    const voiceProvider = await getTenantVoiceProvider();
+    await voiceProvider.stopBatch(batchId);
     revalidatePath("/dashboard/batches");
     return { success: true };
   } catch (error) {

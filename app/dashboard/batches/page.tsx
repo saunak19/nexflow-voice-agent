@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCurrentTenantId } from "@/lib/tenant";
-import { bolnaClient, BatchResponse } from "@/lib/bolna-client";
+import { getTenantVoiceProvider, type VoiceProviderBatch } from "@/lib/voice-providers";
 
 import { BatchesTable } from "./_components/batches-table";
 import { AgentFilter } from "./_components/agent-filter";
@@ -16,6 +16,7 @@ export default async function BatchesPage({
 }) {
   const session = await auth();
   const tenantId = await getCurrentTenantId(session);
+  const voiceProvider = await getTenantVoiceProvider(tenantId);
   const resolvedParams = await searchParams;
   const filterAgentId = typeof resolvedParams.agentId === "string" ? resolvedParams.agentId : undefined;
 
@@ -26,19 +27,19 @@ export default async function BatchesPage({
   });
 
   // 2. Fetch batches from Bolna API
-  let batches: BatchResponse[] = [];
+  let batches: VoiceProviderBatch[] = [];
   
   if (filterAgentId) {
     const selectedAgent = agents.find(a => a.id === filterAgentId);
     if (selectedAgent && selectedAgent.bolnaAgentId) {
-      batches = await bolnaClient.listBatchesForAgent(selectedAgent.bolnaAgentId);
+      batches = await voiceProvider.listBatchesForAgent(selectedAgent.bolnaAgentId);
     }
   } else {
     // Fetch for all agents concurrently
     const batchPromises = agents.map(async (agent) => {
       if (!agent.bolnaAgentId) return [];
       try {
-        return await bolnaClient.listBatchesForAgent(agent.bolnaAgentId);
+        return await voiceProvider.listBatchesForAgent(agent.bolnaAgentId);
       } catch (e) {
         console.error(`Failed to fetch batches for agent ${agent.id}`);
         return [];

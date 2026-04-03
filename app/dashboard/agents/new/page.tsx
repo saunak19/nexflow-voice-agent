@@ -5,8 +5,10 @@ import { use } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { bolnaClient, type BolnaVoice } from "@/lib/bolna-client";
 import { createAgentAction } from "@/app/dashboard/agents/actions";
+import { auth } from "@/lib/auth";
+import { getCurrentTenantId } from "@/lib/tenant";
+import { getTenantVoiceProvider, type VoiceProviderVoice } from "@/lib/voice-providers";
 
 // ─── Submit button  (needs "use client" for useFormStatus) ────────────────────
 import { SubmitButton } from "./_submit-button";
@@ -21,11 +23,14 @@ const selectCls =
 // ─── Page (Server Component — fetches real voices from Bolna) ─────────────────
 
 export default async function NewAgentPage() {
+  const session = await auth();
+  const tenantId = await getCurrentTenantId(session);
+  const voiceProvider = await getTenantVoiceProvider(tenantId);
   // Fetch the account's registered voices. Gracefully fall back to empty array
   // so the page still renders if the API is temporarily unavailable.
-  let voices: BolnaVoice[] = [];
+  let voices: VoiceProviderVoice[] = [];
   try {
-    const all = await bolnaClient.listVoices();
+    const all = await voiceProvider.listVoices();
     voices = all.filter((v) => v.provider === "sarvam");
     // DEBUG: print full sarvam voice objects so we know exact field values
     console.log("[NewAgentPage] ALL voices count:", all.length);

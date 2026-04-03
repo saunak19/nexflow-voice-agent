@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { 
@@ -33,12 +34,15 @@ export function Sidebar() {
     <div className="flex h-full w-64 flex-col bg-white dark:bg-zinc-950 border-r border-zinc-200 dark:border-zinc-800 shadow-sm transition-all duration-300">
       <div className="flex h-16 shrink-0 items-center px-6">
         <Link href="/dashboard" className="flex items-center gap-2 group">
-          <div className="h-8 w-8 rounded-lg bg-zinc-900 flex items-center justify-center text-white font-bold group-hover:scale-110 transition-transform">
-            NF
-          </div>
-          <span className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            NexFlow
-          </span>
+          <Image
+            src="/NexFlow-logo (2).png"
+            alt="NexFlow Logo"
+            width={180}
+            height={42}
+            className="h-8 w-auto object-contain"
+            priority
+          />
+          
         </Link>
       </div>
       

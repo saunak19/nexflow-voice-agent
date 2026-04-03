@@ -1,5 +1,9 @@
 import { Trash2, KeyRound } from "lucide-react";
+import { auth } from "@/lib/auth";
 import { bolnaClient } from "@/lib/bolna-client";
+import { getCurrentTenantId } from "@/lib/tenant";
+import { listTenantProviderConfigs, upsertTenantProviderConfig } from "@/lib/tenant-provider-configs";
+import { listTenantPhoneNumbers } from "@/lib/tenant-phone-numbers";
 import { deleteProviderAction } from "./actions";
 import { Button } from "@/components/ui/button";
 import { ProviderCard, ProviderDef } from "./_components/provider-card";
@@ -13,6 +17,16 @@ const AVAILABLE_PROVIDERS: ProviderDef[] = [
       { name: "TWILIO_ACCOUNT_SID", label: "Account SID" },
       { name: "TWILIO_AUTH_TOKEN", label: "Auth Token", type: "password" },
       { name: "TWILIO_PHONE_NUMBER", label: "Twilio Phone Number" },
+    ],
+  },
+  {
+    id: "plivo",
+    name: "Plivo",
+    description: "Connect your Plivo account to handle inbound and outbound telephony with a separate number pool.",
+    keys: [
+      { name: "PLIVO_AUTH_ID", label: "Auth ID" },
+      { name: "PLIVO_AUTH_TOKEN", label: "Auth Token", type: "password" },
+      { name: "PLIVO_PHONE_NUMBER", label: "Plivo Phone Number" },
     ],
   },
   {
@@ -49,8 +63,50 @@ const AVAILABLE_PROVIDERS: ProviderDef[] = [
   },
 ];
 
+async function syncLegacyTelephonyConfigs(tenantId: string) {
+  const [localConfigs, tenantPhoneNumbers] = await Promise.all([
+    listTenantProviderConfigs(tenantId).catch(() => []),
+    listTenantPhoneNumbers(tenantId).catch(() => []),
+  ]);
+
+  const providerNames = new Set(localConfigs.map((config) => config.provider_name));
+  const tenantTelephonyProviders = new Set(
+    tenantPhoneNumbers
+      .map((phoneNumber) => phoneNumber.telephony_provider?.toLowerCase())
+      .filter((provider): provider is string => provider === "twilio" || provider === "plivo")
+  );
+
+  const missingPrefixes = [...tenantTelephonyProviders].filter((provider) => {
+    const prefix = provider.toUpperCase();
+    return ![...providerNames].some((providerName) => providerName.startsWith(`${prefix}_`));
+  });
+
+  if (missingPrefixes.length === 0) {
+    return localConfigs;
+  }
+
+  const globalProviders = await bolnaClient.listProviders().catch(() => []);
+  for (const prefix of missingPrefixes) {
+    const providerPrefix = `${prefix.toUpperCase()}_`;
+    const matchingConfigs = globalProviders.filter((provider) => provider.provider_name.startsWith(providerPrefix));
+
+    for (const config of matchingConfigs) {
+      await upsertTenantProviderConfig({
+        tenantId,
+        providerName: config.provider_name,
+        providerValue: config.provider_value,
+      });
+    }
+  }
+
+  return listTenantProviderConfigs(tenantId).catch(() => localConfigs);
+}
+
 export default async function ProvidersPage() {
-  const connectedKeys = await bolnaClient.listProviders().catch(() => []);
+  const session = await auth();
+  const tenantId = await getCurrentTenantId(session);
+  const connectedKeys = await syncLegacyTelephonyConfigs(tenantId);
+  const configuredKeyNames = new Set(connectedKeys.map((config) => config.provider_name));
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 animate-in fade-in duration-500 pb-20">
@@ -61,14 +117,18 @@ export default async function ProvidersPage() {
           Integrations & Providers
         </h1>
         <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400 max-w-2xl leading-relaxed">
-          Connect your favorite external services for LLMs, Voice providers, and Telephony globally. API keys are directly routed and injected into your connected Bolna execution environments securely.
+          Connect your favorite external services for LLMs, Voice providers, and Telephony for this workspace. Saved keys shown below are scoped to the current tenant in NexFlow.
         </p>
       </div>
 
       {/* Grid Zone */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {AVAILABLE_PROVIDERS.map((provider) => (
-          <ProviderCard key={provider.id} provider={provider} />
+          <ProviderCard
+            key={provider.id}
+            provider={provider}
+            configuredKeys={provider.keys.filter((key) => configuredKeyNames.has(key.name)).map((key) => key.name)}
+          />
         ))}
       </div>
 
@@ -87,7 +147,7 @@ export default async function ProvidersPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {connectedKeys.map((p) => (
               <div 
-                key={p.provider_id || p.provider_name} 
+                key={`${p.tenant_id}-${p.provider_name}`} 
                 className="flex items-center justify-between p-4 border border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white dark:bg-zinc-950 shadow-sm transition hover:shadow-md"
               >
                 <div>

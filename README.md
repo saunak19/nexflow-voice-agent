@@ -12,6 +12,9 @@ yarn dev
 pnpm dev
 # or
 bun dev
+
+#show database
+npx prisma studio
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.

@@ -2,10 +2,10 @@ import { Suspense } from "react";
 import prisma from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { getCurrentTenantId } from "@/lib/tenant";
-import { bolnaClient, BolnaExecution } from "@/lib/bolna-client";
 import { ExecutionsTable } from "./_components/executions-table";
 import { ExecutionsFilterBar } from "./_components/executions-filter-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getTenantVoiceProvider, type VoiceProviderExecution } from "@/lib/voice-providers";
 import { 
   PhoneOutgoing, 
   Clock, 
@@ -21,6 +21,7 @@ async function getAggregatedExecutions(
   batchId?: string, 
   dateRange?: { start: string; end: string }
 ) {
+  const voiceProvider = await getTenantVoiceProvider(tenantId);
   // 1. Fetch all local agents for this tenant
   const agentsList = await prisma.agent.findMany({
     where: { tenantId },
@@ -29,24 +30,24 @@ async function getAggregatedExecutions(
 
   if (agentsList.length === 0) return { executions: [], agentsList };
 
-  let executions: BolnaExecution[] = [];
+  let executions: VoiceProviderExecution[] = [];
 
   // 2. Fetch logic based on searchParams
   // If batch selected
   if (batchId && batchId !== "all") {
-    executions = await bolnaClient.getExecutions(undefined, batchId, dateRange);
+    executions = await voiceProvider.getExecutions(undefined, batchId, dateRange);
   } 
   // If specific agent selected
   else if (agentId && agentId !== "all") {
     const selectedBolnaAgentId = agentsList.find(a => a.id === agentId)?.bolnaAgentId;
     if (selectedBolnaAgentId) {
-      executions = await bolnaClient.getExecutions(selectedBolnaAgentId, undefined, dateRange);
+      executions = await voiceProvider.getExecutions(selectedBolnaAgentId, undefined, dateRange);
     }
   } 
   // If no filters (Global Fanout)
   else {
-    const results = await Promise.all(
-      agentsList.map(agent => bolnaClient.getExecutions(agent.bolnaAgentId, undefined, dateRange))
+      const results = await Promise.all(
+      agentsList.map(agent => voiceProvider.getExecutions(agent.bolnaAgentId, undefined, dateRange))
     );
     executions = results.flat();
   }
@@ -74,7 +75,8 @@ function getUsageCost(ex: { total_cost?: number; cost_breakdown?: { platform?: n
   const totalCost = Number(ex.total_cost ?? 0);
   const platformFee = Number(ex.cost_breakdown?.platform ?? 0);
   const usage = totalCost - platformFee;
-  return usage > 0 ? usage : 0;
+  const markupUsage = usage * 1.4; // 40% increase
+  return markupUsage > 0 ? markupUsage : 0;
 }
 
 export default async function CallsPage({

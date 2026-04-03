@@ -1,16 +1,21 @@
 import Link from "next/link";
 import { ArrowLeft, Globe, Search, ShoppingCart } from "lucide-react";
 
-import { bolnaClient } from "@/lib/bolna-client";
+import { auth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { buyPhoneNumberAction } from "@/app/dashboard/numbers/actions";
+import { getCurrentTenantId } from "@/lib/tenant";
+import { getTenantVoiceProvider } from "@/lib/voice-providers";
 
 export default async function SearchNumbersPage({
   searchParams,
 }: {
   searchParams: Promise<{ country?: string; pattern?: string }>;
 }) {
+  const session = await auth();
+  const tenantId = await getCurrentTenantId(session);
+  const voiceProvider = await getTenantVoiceProvider(tenantId);
   const params = await searchParams;
   const country = params.country || "US";
   const pattern = params.pattern || "";
@@ -25,7 +30,7 @@ export default async function SearchNumbersPage({
 
   if (country) {
     try {
-      results = await bolnaClient.searchPhoneNumbers({
+      results = await voiceProvider.searchPhoneNumbers({
         country,
         pattern,
       });
@@ -122,6 +127,9 @@ export default async function SearchNumbersPage({
               <form action={buyPhoneNumberAction} className="mt-6">
                 <input type="hidden" name="phoneNumber" value={number.phone_number} />
                 <input type="hidden" name="country" value={country} />
+                <input type="hidden" name="locality" value={number.locality ?? ""} />
+                <input type="hidden" name="region" value={number.region ?? ""} />
+                <input type="hidden" name="friendlyName" value={[number.locality, number.region].filter(Boolean).join(", ")} />
                 <Button type="submit" className="h-10 w-full rounded-xl bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200">
                   <ShoppingCart className="mr-2 h-4 w-4" />
                   Buy this number

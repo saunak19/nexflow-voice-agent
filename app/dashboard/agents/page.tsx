@@ -7,7 +7,7 @@ import { MagicCallButton } from "@/components/magic-call-button";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { SyncAgentsButton } from "@/components/sync-agents-button";
 import { DeleteAgentButton } from "./_components/delete-agent-button";
-import { bolnaClient } from "@/lib/bolna-client";
+import { listTenantPhoneNumbers } from "@/lib/tenant-phone-numbers";
 
 function formatDate(date: Date) {
   return new Intl.DateTimeFormat("en-US", {
@@ -28,7 +28,7 @@ export default async function AgentsPage() {
 
   let phoneNumbers: { phone_number: string }[] = [];
   try {
-    phoneNumbers = await bolnaClient.listPhoneNumbers();
+    phoneNumbers = await listTenantPhoneNumbers(tenantId);
   } catch (err) {
     console.error("[AgentsPage] failed to fetch phone numbers:", err);
   }

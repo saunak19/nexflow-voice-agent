@@ -25,6 +25,7 @@ model Tenant {
   knowledgeBases KnowledgeBase[]
   batches        Batch[]
   sipTrunks      SipTrunk[]
+  phoneNumbers   TenantPhoneNumber[]
 }
 
 // NextAuth.js Models
@@ -106,6 +107,8 @@ model CallExecution {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  adId             String?  
+  creativeName     String?
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
   agent    Agent     @relation(fields: [agentId], references: [id])
   callLogs CallLog[]
@@ -174,4 +177,23 @@ model SipTrunk {
   updatedAt    DateTime @updatedAt
 
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model TenantPhoneNumber {
+  phoneNumber      String   @id
+  tenantId         String
+  friendlyName     String?
+  locality         String?
+  region           String?
+  country          String?
+  postalCode       String?
+  telephonyProvider String?
+  providerNumberId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("tenant_phone_numbers")
 }

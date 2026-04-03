@@ -28,9 +28,13 @@ export interface AgentTask {
 }
 
 export interface AgentV2Payload {
-  agent_name: string;
-  tasks: AgentTask[];
-  webhook_url?: string;
+  agent_config?: {
+    agent_name?: string;
+    agent_welcome_message?: string;
+    tasks?: AgentTask[];
+    webhook_url?: string;
+  };
+  agent_prompts?: Record<string, { system_prompt: string }>;
 }
 
 export interface AgentV2Response {
@@ -476,9 +480,11 @@ export class BolnaClient {
     form.append("agent_id", agentId);
     form.append("file", csvBlob, metadata.name ? `${metadata.name}.csv` : "contacts.csv");
 
-    if (metadata.from_number) {
-      form.append("from_number", metadata.from_number);
-    }
+    // After
+if (metadata.from_number) {
+  form.append("from_phone_number", metadata.from_number);
+  console.log("[BolnaClient.createBatch] Appending from_phone_number:", metadata.from_number);
+}
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30_000);

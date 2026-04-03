@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { bolnaClient } from "@/lib/bolna-client";
 import prisma from "@/lib/db";
+import { getCurrentTenantId } from "@/lib/tenant";
+import { assertTenantOwnsPhoneNumber, normalizePhoneNumber } from "@/lib/tenant-phone-numbers";
+import { getTenantVoiceProvider } from "@/lib/voice-providers";
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,21 +12,22 @@ export async function POST(req: NextRequest) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
 
     // ── Parse body ────────────────────────────────────────────────────────
     const body = await req.json() as {
       phoneNumber?: string;
       agentId?: string;
-      tenantId?: string;
       fromNumber?: string;
       userData?: Record<string, string | number | boolean>;
     };
 
-    const { phoneNumber, agentId, tenantId, fromNumber, userData } = body;
+    const { phoneNumber, agentId, fromNumber, userData } = body;
 
-    if (!phoneNumber || !agentId || !tenantId) {
+    if (!phoneNumber || !agentId) {
       return NextResponse.json(
-        { error: "Missing required fields: phoneNumber, agentId, tenantId" },
+        { error: "Missing required fields: phoneNumber, agentId" },
         { status: 400 }
       );
     }
@@ -41,13 +44,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
+    let normalizedFromNumber: string | undefined;
+
+    if (fromNumber) {
+      normalizedFromNumber = normalizePhoneNumber(fromNumber);
+      await assertTenantOwnsPhoneNumber(tenantId, normalizedFromNumber);
+    }
+
     // ── Trigger Bolna call ────────────────────────────────────────────────
     let bolnaResponse: { call_id: string; status: string };
     try {
-      bolnaResponse = await bolnaClient.triggerCall({
+      bolnaResponse = await voiceProvider.triggerCall({
         agent_id: agent.bolnaAgentId,
-        recipient_phone_number: phoneNumber,
-        from_phone_number: fromNumber,
+        recipient_phone_number: normalizedPhoneNumber,
+        from_phone_number: normalizedFromNumber,
         user_data: userData,
       });
     } catch (bolnaErr) {
@@ -65,7 +76,7 @@ export async function POST(req: NextRequest) {
       data: {
         tenantId,
         agentId,
-        phoneNumber,
+        phoneNumber: normalizedPhoneNumber,
         bolnaExecutionId: call_id, // Bolna's call_id stored as bolnaExecutionId
         status: "queued",
       },

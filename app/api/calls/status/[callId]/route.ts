@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { bolnaClient } from "@/lib/bolna-client";
 import prisma from "@/lib/db";
+import { getCurrentTenantId } from "@/lib/tenant";
+import { getTenantVoiceProvider } from "@/lib/voice-providers";
 
 const RATE_LIMIT_SECONDS = 30;
 
@@ -14,6 +15,8 @@ export async function GET(
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
 
     const { callId } = await params;
     if (!callId) {
@@ -49,7 +52,7 @@ export async function GET(
     // ── Poll Bolna for latest status ───────────────────────────────────────
     let bolnaData;
     try {
-      bolnaData = await bolnaClient.getCallStatus(execution.bolnaExecutionId);
+      bolnaData = await voiceProvider.getCallStatus(execution.bolnaExecutionId);
     } catch (bolnaErr) {
       console.error("[status/route] Bolna poll failed:", bolnaErr);
       // Return stale local data rather than erroring

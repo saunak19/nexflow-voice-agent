@@ -47,15 +47,21 @@ export function MagicCallButton({
     // Pass fromPhoneNumber to the action
     const result = await makeCallAction(agentId, phoneNumber, fromPhoneNumber || undefined);
     
-    if (!result.success || !result.bolnaCallId) {
+    if (!result.success) {
       toast.error(result.error || "Failed to initiate call");
       setStatus("idle");
       return;
     }
 
-    toast.success(`Call connected! Session ID: ${result.bolnaCallId}`);
-    setActiveExecutionId(result.bolnaCallId);
-    setStatus("active");
+    if (result.bolnaCallId) {
+      toast.success(`Call connected! Session ID: ${result.bolnaCallId}`);
+      setActiveExecutionId(result.bolnaCallId);
+      setStatus("active");
+      return;
+    }
+
+    toast.success("Call initiated successfully.");
+    setStatus("idle");
   };
 
   const handleStopCall = async () => {

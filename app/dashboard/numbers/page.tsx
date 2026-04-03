@@ -9,12 +9,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { bolnaClient } from "@/lib/bolna-client";
 import { deletePhoneNumberAction } from "@/app/dashboard/numbers/actions";
 import { ImportNumberModal } from "./_components/import-number-modal";
+import { getCurrentTenantId } from "@/lib/tenant";
+import { listTenantPhoneNumbers } from "@/lib/tenant-phone-numbers";
 
 export default async function NumbersPage() {
-  await auth();
+  const session = await auth();
+  const tenantId = await getCurrentTenantId(session);
   let numbers: Array<{
     phone_number: string;
     locality?: string | null;
@@ -24,7 +26,7 @@ export default async function NumbersPage() {
   let loadError = "";
 
   try {
-    numbers = await bolnaClient.listPhoneNumbers();
+    numbers = await listTenantPhoneNumbers(tenantId);
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Unable to load phone numbers.";
   }

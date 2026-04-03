@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/db";
 import { getCurrentTenantId } from "@/lib/tenant";
+import { listTenantPhoneNumbers } from "@/lib/tenant-phone-numbers";
 import { MagicCallButton } from "@/components/magic-call-button";
 
 export default async function AgentDetailPage({
@@ -26,6 +27,8 @@ export default async function AgentDetailPage({
   if (!agent) {
     notFound();
   }
+
+  const phoneNumbers = await listTenantPhoneNumbers(tenantId);
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
@@ -68,7 +71,11 @@ export default async function AgentDetailPage({
               <PhoneCall className="h-4 w-4" />
               Trigger a call
             </div>
-            <MagicCallButton agentId={agent.id} tenantId={agent.tenantId} />
+            <MagicCallButton
+              agentId={agent.id}
+              tenantId={agent.tenantId}
+              phoneNumbers={phoneNumbers.map((number) => ({ phone_number: number.phone_number }))}
+            />
           </div>
 
           <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-800 dark:bg-zinc-900/40">

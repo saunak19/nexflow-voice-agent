@@ -3,6 +3,10 @@ import { PrismaAdapter } from "@auth/prisma-adapter"
 import prisma from "@/lib/db"
 import Google from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
+import { Role } from "@prisma/client"
+import { type DefaultSession } from "next-auth"
+
+// Type augmentation for role and tenantId has been moved to types/next-auth.d.ts
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
