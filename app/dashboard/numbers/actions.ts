@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Role } from "@prisma/client";
 
 import { auth } from "@/lib/auth";
+import { requireTenantRole } from "@/lib/authorization";
 import { getCurrentTenantId } from "@/lib/tenant";
 import {
   deleteTenantPhoneNumber,
@@ -14,6 +16,7 @@ import { getTenantVoiceProvider } from "@/lib/voice-providers";
 
 export async function buyPhoneNumberAction(formData: FormData) {
   const session = await auth();
+  await requireTenantRole(session, Role.ADMIN);
   const tenantId = await getCurrentTenantId(session);
   const voiceProvider = await getTenantVoiceProvider(tenantId);
   const rawPhoneNumber = String(formData.get("phoneNumber") || "");
@@ -51,6 +54,7 @@ export async function buyPhoneNumberAction(formData: FormData) {
 
 export async function deletePhoneNumberAction(formData: FormData) {
   const session = await auth();
+  await requireTenantRole(session, Role.ADMIN);
   const tenantId = await getCurrentTenantId(session);
   const voiceProvider = await getTenantVoiceProvider(tenantId);
   const rawPhoneNumber = String(formData.get("phoneNumber") || "");
@@ -76,6 +80,7 @@ export async function deletePhoneNumberAction(formData: FormData) {
 
 export async function importPhoneNumberAction(formData: FormData) {
   const session = await auth();
+  await requireTenantRole(session, Role.ADMIN);
   const tenantId = await getCurrentTenantId(session);
   const voiceProvider = await getTenantVoiceProvider(tenantId);
   const provider = String(formData.get("provider") || "twilio");

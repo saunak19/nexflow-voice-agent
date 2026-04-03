@@ -3,8 +3,10 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { Role } from "@prisma/client";
 
 import { auth } from "@/lib/auth";
+import { requireTenantRole } from "@/lib/authorization";
 import prisma from "@/lib/db";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { assertTenantOwnsPhoneNumber, normalizePhoneNumber } from "@/lib/tenant-phone-numbers";
@@ -40,6 +42,7 @@ export async function createAgentAction(formData: FormData) {
 
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
 
@@ -111,35 +114,33 @@ export async function syncAgentsAction(): Promise<{ synced: number; total: numbe
   "use server";
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
 
     const bolnaAgents = await voiceProvider.listAgents();
+    const existingAgents = await prisma.agent.findMany({
+      where: { tenantId },
+      select: { id: true, bolnaAgentId: true },
+    });
+    const existingAgentMap = new Map(
+      existingAgents.map((agent) => [agent.bolnaAgentId, agent.id])
+    );
     let synced = 0;
 
     for (const bolnaAgent of bolnaAgents) {
-      const existing = await prisma.agent.findFirst({
-        where: { bolnaAgentId: bolnaAgent.agent_id },
-      });
-      if (existing) {
+      const existingId = existingAgentMap.get(bolnaAgent.agent_id);
+      if (existingId) {
         await prisma.agent.update({
-          where: { id: existing.id },
+          where: { id: existingId },
           data: { name: bolnaAgent.agent_name },
         });
-      } else {
-        await prisma.agent.create({
-          data: {
-            tenantId,
-            bolnaAgentId: bolnaAgent.agent_id,
-            name: bolnaAgent.agent_name,
-          },
-        });
+        synced++;
       }
-      synced++;
     }
 
     revalidatePath("/dashboard/agents");
-    return { synced, total: bolnaAgents.length };
+    return { synced, total: existingAgents.length };
   } catch (error) {
     console.error("[syncAgentsAction]:", error);
     throw new Error("Failed to sync agents from Bolna.");
@@ -148,10 +149,11 @@ export async function syncAgentsAction(): Promise<{ synced: number; total: numbe
 
 // ─── Delete Agent ─────────────────────────────────────────────────────────────
 
-export async function deleteAgentAction(localAgentId: string, bolnaAgentId: string) {
+export async function deleteAgentAction(localAgentId: string, _bolnaAgentId: string) {
   "use server";
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
 
@@ -160,8 +162,8 @@ export async function deleteAgentAction(localAgentId: string, bolnaAgentId: stri
 
     // Best-effort delete from Bolna
     try {
-      if (bolnaAgentId) {
-        await voiceProvider.deleteAgent(bolnaAgentId);
+      if (agent.bolnaAgentId) {
+        await voiceProvider.deleteAgent(agent.bolnaAgentId);
       }
     } catch (bolnaErr: any) {
       if (bolnaErr?.message?.includes("404")) {
@@ -194,6 +196,7 @@ export async function updateAgentAction(formData: FormData) {
 
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
 
@@ -237,6 +240,7 @@ export async function stopAgentCallsAction(formData: FormData) {
   "use server";
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
     const id = String(formData.get("id") ?? "");
@@ -262,6 +266,7 @@ export async function makeCallAction(
 ) {
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
 
@@ -305,6 +310,7 @@ export async function makeCallAction(
 export async function stopCallAction(executionId: string) {
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
 
@@ -312,7 +318,19 @@ export async function stopCallAction(executionId: string) {
       throw new Error("Execution ID is required.");
     }
 
-    await voiceProvider.stopCall(executionId);
+    const execution = await prisma.callExecution.findFirst({
+      where: {
+        tenantId,
+        OR: [{ bolnaExecutionId: executionId }, { id: executionId }],
+      },
+      select: { bolnaExecutionId: true },
+    });
+
+    if (!execution) {
+      throw new Error("Call not found for this workspace.");
+    }
+
+    await voiceProvider.stopCall(execution.bolnaExecutionId);
 
     return { success: true };
   } catch (error: any) {

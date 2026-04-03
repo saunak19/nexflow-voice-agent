@@ -3,8 +3,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter"
 import prisma from "@/lib/db"
 import Google from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
-import { Role } from "@prisma/client"
-import { type DefaultSession } from "next-auth"
+import { verifyUserPassword } from "@/lib/password-credentials"
 
 // Type augmentation for role and tenantId has been moved to types/next-auth.d.ts
 
@@ -26,10 +25,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         
         const user = await prisma.user.findUnique({
           where: { email: credentials.email as string },
-          include: { tenant: true }
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            tenantId: true,
+          }
         })
 
         if (!user) return null
+
+        const validPassword = await verifyUserPassword(user.id, credentials.password as string)
+        if (!validPassword) return null
 
         return {
           id: user.id,

@@ -1,4 +1,5 @@
 import prisma from "@/lib/db";
+import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/secret-crypto";
 
 export type TenantProviderConfig = {
   tenant_id: string;
@@ -34,6 +35,22 @@ async function ensureTenantProviderConfigsTable() {
         CREATE INDEX IF NOT EXISTS tenant_provider_configs_provider_name_idx
         ON tenant_provider_configs (provider_name)
       `);
+
+      const rows = await prisma.$queryRaw<Array<{ tenant_id: string; provider_name: string; provider_value: string }>>`
+        SELECT tenant_id, provider_name, provider_value
+        FROM tenant_provider_configs
+      `;
+
+      for (const row of rows) {
+        if (row.provider_value && !isEncryptedSecret(row.provider_value)) {
+          await prisma.$executeRaw`
+            UPDATE tenant_provider_configs
+            SET provider_value = ${encryptSecret(row.provider_value)}, updated_at = NOW()
+            WHERE tenant_id = ${row.tenant_id}
+              AND provider_name = ${row.provider_name}
+          `;
+        }
+      }
     })().catch((error) => {
       ensureTablePromise = null;
       throw error;
@@ -46,7 +63,7 @@ async function ensureTenantProviderConfigsTable() {
 export async function listTenantProviderConfigs(tenantId: string) {
   await ensureTenantProviderConfigsTable();
 
-  return prisma.$queryRaw<TenantProviderConfig[]>`
+  const rows = await prisma.$queryRaw<TenantProviderConfig[]>`
     SELECT
       tenant_id,
       provider_name,
@@ -57,6 +74,11 @@ export async function listTenantProviderConfigs(tenantId: string) {
     WHERE tenant_id = ${tenantId}
     ORDER BY created_at DESC, provider_name ASC
   `;
+
+  return rows.map((row) => ({
+    ...row,
+    provider_value: decryptSecret(row.provider_value) ?? "",
+  }));
 }
 
 export async function getTenantProviderConfig(tenantId: string, providerName: string) {
@@ -75,7 +97,13 @@ export async function getTenantProviderConfig(tenantId: string, providerName: st
     LIMIT 1
   `;
 
-  return rows[0] ?? null;
+  const row = rows[0] ?? null;
+  return row
+    ? {
+        ...row,
+        provider_value: decryptSecret(row.provider_value) ?? "",
+      }
+    : null;
 }
 
 export async function upsertTenantProviderConfig(input: UpsertTenantProviderConfigInput) {
@@ -91,7 +119,7 @@ export async function upsertTenantProviderConfig(input: UpsertTenantProviderConf
     VALUES (
       ${input.tenantId},
       ${input.providerName},
-      ${input.providerValue},
+      ${encryptSecret(input.providerValue)},
       NOW()
     )
     ON CONFLICT (tenant_id, provider_name) DO UPDATE

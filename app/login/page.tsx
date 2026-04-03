@@ -26,7 +26,7 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        toast.error("Invalid credentials. Hint: use any registered user.");
+        toast.error("Invalid credentials.");
       } else {
         toast.success("Welcome back! 🚀");
         router.push("/dashboard");
@@ -46,7 +46,7 @@ export default function LoginPage() {
             Welcome to NexFlow
           </h1>
           <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-            Sign in to your Bolna Voice AI admin panel
+            Sign in to your NexFlow workspace securely
           </p>
         </div>
 

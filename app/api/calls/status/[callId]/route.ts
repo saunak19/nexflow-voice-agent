@@ -25,7 +25,7 @@ export async function GET(
 
     // ── Look up local execution ────────────────────────────────────────────
     const execution = await prisma.callExecution.findFirst({
-      where: { id: callId },
+      where: { id: callId, tenantId },
       include: { agent: true },
     });
 

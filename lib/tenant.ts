@@ -1,4 +1,5 @@
 import prisma from "@/lib/db";
+import { Role } from "@prisma/client";
 
 type SessionLike = {
   user?: {
@@ -50,6 +51,7 @@ export async function getCurrentTenantId(session: SessionLike) {
     where: { id: user.id },
     data: {
       tenantId: tenant.id,
+      role: Role.OWNER,
     },
   });
 

@@ -1,8 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Role } from "@prisma/client";
 import { auth } from "@/lib/auth";
+import { requireTenantRole } from "@/lib/authorization";
 import { bolnaClient } from "@/lib/bolna-client";
+import prisma from "@/lib/db";
 import { getCurrentTenantId } from "@/lib/tenant";
 import {
   deleteTenantPhoneNumber,
@@ -28,6 +31,19 @@ function getTelephonyProviderName(providerKey: string) {
   return providerKey.replace(/_PHONE_NUMBER$/, "").toLowerCase();
 }
 
+async function assertSharedProviderMutationAllowed() {
+  if (process.env.ALLOW_SHARED_BOLNA_PROVIDER_MUTATIONS === "true") {
+    return;
+  }
+
+  const tenantCount = await prisma.tenant.count();
+  if (tenantCount > 1) {
+    throw new Error(
+      "Provider credential changes are disabled in multi-tenant mode until tenant-scoped provider backends are configured. Set ALLOW_SHARED_BOLNA_PROVIDER_MUTATIONS=true only if you intentionally accept shared-provider risk."
+    );
+  }
+}
+
 async function syncTenantPhoneNumberForProviderKey(
   tenantId: string,
   providerKey: string,
@@ -50,11 +66,13 @@ async function syncTenantPhoneNumberForProviderKey(
 export async function addProviderAction(formData: FormData) {
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const name = formData.get("provider_name") as string;
     const value = formData.get("provider_value") as string;
     if (!name || !value) throw new Error("Name and value are required");
-    
+
+    await assertSharedProviderMutationAllowed();
     await bolnaClient.addProvider(name, value);
     await upsertTenantProviderConfig({
       tenantId,
@@ -75,10 +93,12 @@ export async function addProviderAction(formData: FormData) {
 export async function deleteProviderAction(formData: FormData) {
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const name = formData.get("provider_name") as string;
     if (!name) throw new Error("Provider name is required");
 
+    await assertSharedProviderMutationAllowed();
     const localProvider = await getTenantProviderConfig(tenantId, name);
     if (!localProvider) {
       throw new Error("Provider config not found for this workspace.");
@@ -106,7 +126,9 @@ export async function deleteProviderAction(formData: FormData) {
 export async function connectProviderConfigsAction(formData: FormData) {
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
+    await assertSharedProviderMutationAllowed();
     const existingProviders = await bolnaClient.listProviders().catch(() => []);
     const existingMap = new Map(
       existingProviders.map((provider) => [provider.provider_name, provider.provider_value])

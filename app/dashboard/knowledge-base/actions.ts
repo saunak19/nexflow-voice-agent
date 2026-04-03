@@ -3,8 +3,10 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { Role } from "@prisma/client";
 
 import { auth } from "@/lib/auth";
+import { requireTenantRole } from "@/lib/authorization";
 import prisma from "@/lib/db";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { bolnaClient } from "@/lib/bolna-client";
@@ -24,6 +26,7 @@ export async function createKnowledgeBaseAction(formData: FormData) {
   
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
 
     const parsed = createKnowledgeBaseSchema.parse({
@@ -82,6 +85,7 @@ export async function deleteKnowledgeBaseAction(formData: FormData) {
   "use server";
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const id = String(formData.get("id") ?? "");
 

@@ -3,8 +3,10 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { Role } from "@prisma/client";
 
 import { auth } from "@/lib/auth";
+import { requireTenantRole } from "@/lib/authorization";
 import prisma from "@/lib/db";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { assertTenantOwnsPhoneNumber, normalizePhoneNumber } from "@/lib/tenant-phone-numbers";
@@ -19,6 +21,7 @@ export async function createBatchAction(formData: FormData) {
   "use server";
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
 
@@ -73,6 +76,7 @@ export async function toggleBatchStatusAction(formData: FormData) {
   "use server";
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
     const id = String(formData.get("id") ?? "");
@@ -112,6 +116,7 @@ export async function syncBatchProgressAction(formData: FormData) {
   "use server";
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
     const id = String(formData.get("id") ?? "");
@@ -141,6 +146,7 @@ export async function syncBatchProgressAction(formData: FormData) {
 export async function uploadBatchAction(formData: FormData) {
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
 
@@ -264,13 +270,23 @@ export async function uploadBatchAction(formData: FormData) {
 export async function deleteBatchAction(batchId: string) {
   try {
     const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
 
-    await voiceProvider.deleteBatch(batchId);
+    const batch = await prisma.batch.findFirst({
+      where: { bolnaBatchId: batchId, tenantId },
+      select: { bolnaBatchId: true },
+    });
+
+    if (!batch?.bolnaBatchId) {
+      throw new Error("Batch not found for this workspace.");
+    }
+
+    await voiceProvider.deleteBatch(batch.bolnaBatchId);
 
     await prisma.batch.deleteMany({
-      where: { bolnaBatchId: batchId, tenantId },
+      where: { bolnaBatchId: batch.bolnaBatchId, tenantId },
     });
 
     revalidatePath("/dashboard/batches");
@@ -283,11 +299,23 @@ export async function deleteBatchAction(batchId: string) {
 
 export async function runBatchNowAction(batchId: string) {
   try {
-    const voiceProvider = await getTenantVoiceProvider();
+    const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
+    const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
+    const batch = await prisma.batch.findFirst({
+      where: { bolnaBatchId: batchId, tenantId },
+      select: { bolnaBatchId: true },
+    });
+
+    if (!batch?.bolnaBatchId) {
+      throw new Error("Batch not found for this workspace.");
+    }
+
     const futureDate = new Date();
     futureDate.setMinutes(futureDate.getMinutes() + 3); // Bolna requires >2 minutes
     
-    await voiceProvider.scheduleBatch(batchId, futureDate.toISOString());
+    await voiceProvider.scheduleBatch(batch.bolnaBatchId, futureDate.toISOString());
     // Also trigger revalidation
     revalidatePath("/dashboard/batches");
     return { success: true };
@@ -299,8 +327,20 @@ export async function runBatchNowAction(batchId: string) {
 
 export async function stopBatchAction(batchId: string) {
   try {
-    const voiceProvider = await getTenantVoiceProvider();
-    await voiceProvider.stopBatch(batchId);
+    const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
+    const tenantId = await getCurrentTenantId(session);
+    const voiceProvider = await getTenantVoiceProvider(tenantId);
+    const batch = await prisma.batch.findFirst({
+      where: { bolnaBatchId: batchId, tenantId },
+      select: { bolnaBatchId: true },
+    });
+
+    if (!batch?.bolnaBatchId) {
+      throw new Error("Batch not found for this workspace.");
+    }
+
+    await voiceProvider.stopBatch(batch.bolnaBatchId);
     revalidatePath("/dashboard/batches");
     return { success: true };
   } catch (error) {

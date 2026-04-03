@@ -1,11 +1,15 @@
 import { Trash2, KeyRound } from "lucide-react";
+import { Role } from "@prisma/client";
+
 import { auth } from "@/lib/auth";
-import { bolnaClient } from "@/lib/bolna-client";
-import { getCurrentTenantId } from "@/lib/tenant";
-import { listTenantProviderConfigs, upsertTenantProviderConfig } from "@/lib/tenant-provider-configs";
-import { listTenantPhoneNumbers } from "@/lib/tenant-phone-numbers";
-import { deleteProviderAction } from "./actions";
+import { requireTenantRole } from "@/lib/authorization";
+import { AccessDeniedState } from "@/components/access-denied-state";
 import { Button } from "@/components/ui/button";
+import { getCurrentTenantId } from "@/lib/tenant";
+import { listTenantProviderConfigs } from "@/lib/tenant-provider-configs";
+import { listTenantPhoneNumbers } from "@/lib/tenant-phone-numbers";
+
+import { deleteProviderAction } from "./actions";
 import { ProviderCard, ProviderDef } from "./_components/provider-card";
 
 const AVAILABLE_PROVIDERS: ProviderDef[] = [
@@ -33,146 +37,129 @@ const AVAILABLE_PROVIDERS: ProviderDef[] = [
     id: "openai",
     name: "OpenAI",
     description: "Power your agents with GPT-4 turbo and advanced language reasoning models.",
-    keys: [
-      { name: "OPENAI_API_KEY", label: "OpenAI API Key", type: "password" },
-    ],
+    keys: [{ name: "OPENAI_API_KEY", label: "OpenAI API Key", type: "password" }],
   },
   {
     id: "sarvam",
     name: "Sarvam AI",
     description: "Next-gen Indian language models for incredibly realistic multilingual voice synthesis.",
-    keys: [
-      { name: "SARVAM_API_KEY", label: "Sarvam API Key", type: "password" },
-    ],
+    keys: [{ name: "SARVAM_API_KEY", label: "Sarvam API Key", type: "password" }],
   },
   {
     id: "elevenlabs",
     name: "ElevenLabs",
     description: "Ultra-realistic voice synthesis and voice cloning for personalized agent personalities.",
-    keys: [
-      { name: "ELEVENLABS_API_KEY", label: "ElevenLabs API Key", type: "password" },
-    ],
+    keys: [{ name: "ELEVENLABS_API_KEY", label: "ElevenLabs API Key", type: "password" }],
   },
   {
     id: "deepgram",
     name: "Deepgram",
     description: "High-speed, accurate speech-to-text models specialized for conversational agents.",
-    keys: [
-      { name: "DEEPGRAM_AUTH_TOKEN", label: "Deepgram Auth Token", type: "password" },
-    ],
+    keys: [{ name: "DEEPGRAM_AUTH_TOKEN", label: "Deepgram Auth Token", type: "password" }],
   },
 ];
 
-async function syncLegacyTelephonyConfigs(tenantId: string) {
-  const [localConfigs, tenantPhoneNumbers] = await Promise.all([
-    listTenantProviderConfigs(tenantId).catch(() => []),
-    listTenantPhoneNumbers(tenantId).catch(() => []),
-  ]);
-
-  const providerNames = new Set(localConfigs.map((config) => config.provider_name));
-  const tenantTelephonyProviders = new Set(
-    tenantPhoneNumbers
-      .map((phoneNumber) => phoneNumber.telephony_provider?.toLowerCase())
-      .filter((provider): provider is string => provider === "twilio" || provider === "plivo")
-  );
-
-  const missingPrefixes = [...tenantTelephonyProviders].filter((provider) => {
-    const prefix = provider.toUpperCase();
-    return ![...providerNames].some((providerName) => providerName.startsWith(`${prefix}_`));
-  });
-
-  if (missingPrefixes.length === 0) {
-    return localConfigs;
-  }
-
-  const globalProviders = await bolnaClient.listProviders().catch(() => []);
-  for (const prefix of missingPrefixes) {
-    const providerPrefix = `${prefix.toUpperCase()}_`;
-    const matchingConfigs = globalProviders.filter((provider) => provider.provider_name.startsWith(providerPrefix));
-
-    for (const config of matchingConfigs) {
-      await upsertTenantProviderConfig({
-        tenantId,
-        providerName: config.provider_name,
-        providerValue: config.provider_value,
-      });
-    }
-  }
-
-  return listTenantProviderConfigs(tenantId).catch(() => localConfigs);
-}
-
 export default async function ProvidersPage() {
-  const session = await auth();
-  const tenantId = await getCurrentTenantId(session);
-  const connectedKeys = await syncLegacyTelephonyConfigs(tenantId);
-  const configuredKeyNames = new Set(connectedKeys.map((config) => config.provider_name));
+  try {
+    const session = await auth();
+    await requireTenantRole(session, Role.ADMIN);
+    const tenantId = await getCurrentTenantId(session);
+    const [connectedKeys, tenantPhoneNumbers] = await Promise.all([
+      listTenantProviderConfigs(tenantId).catch(() => []),
+      listTenantPhoneNumbers(tenantId).catch(() => []),
+    ]);
+    const configuredKeyNames = new Set(connectedKeys.map((config) => config.provider_name));
 
-  return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 animate-in fade-in duration-500 pb-20">
-      
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Integrations & Providers
-        </h1>
-        <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400 max-w-2xl leading-relaxed">
-          Connect your favorite external services for LLMs, Voice providers, and Telephony for this workspace. Saved keys shown below are scoped to the current tenant in NexFlow.
-        </p>
-      </div>
+    for (const phoneNumber of tenantPhoneNumbers) {
+      if (phoneNumber.telephony_provider?.toLowerCase() === "twilio") {
+        configuredKeyNames.add("TWILIO_PHONE_NUMBER");
+      }
+      if (phoneNumber.telephony_provider?.toLowerCase() === "plivo") {
+        configuredKeyNames.add("PLIVO_PHONE_NUMBER");
+      }
+    }
 
-      {/* Grid Zone */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {AVAILABLE_PROVIDERS.map((provider) => (
-          <ProviderCard
-            key={provider.id}
-            provider={provider}
-            configuredKeys={provider.keys.filter((key) => configuredKeyNames.has(key.name)).map((key) => key.name)}
-          />
-        ))}
-      </div>
+    return (
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 animate-in fade-in duration-500 pb-20">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            Integrations & Providers
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
+            Connect your favorite external services for LLMs, voice providers, and telephony for this
+            workspace. Saved keys shown below are scoped to the current tenant in NexFlow.
+          </p>
+        </div>
 
-      {/* Connected Keys Overview */}
-      <div className="pt-8 border-t border-zinc-200 dark:border-zinc-800">
-        <h2 className="text-xl font-bold mb-6 text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-          <KeyRound className="h-5 w-5 text-zinc-400" />
-          Active Configurations
-        </h2>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {AVAILABLE_PROVIDERS.map((provider) => (
+            <ProviderCard
+              key={provider.id}
+              provider={provider}
+              configuredKeys={provider.keys
+                .filter((key) => configuredKeyNames.has(key.name))
+                .map((key) => key.name)}
+            />
+          ))}
+        </div>
 
-        {connectedKeys.length === 0 ? (
-          <div className="bg-zinc-50 dark:bg-zinc-900/40 rounded-3xl p-10 text-center border border-zinc-200 dark:border-zinc-800 border-dashed">
-            <p className="text-sm font-medium text-zinc-500">No active keys synced. Start connecting a provider above.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {connectedKeys.map((p) => (
-              <div 
-                key={`${p.tenant_id}-${p.provider_name}`} 
-                className="flex items-center justify-between p-4 border border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white dark:bg-zinc-950 shadow-sm transition hover:shadow-md"
-              >
-                <div>
-                  <p className="font-bold text-sm text-zinc-900 dark:text-zinc-100 mb-0.5">{p.provider_name}</p>
-                  <p className="text-xs text-zinc-500 font-mono truncate max-w-[200px]">
-                    {p.provider_name.includes("PHONE_NUMBER") ? p.provider_value : "••••••••••••••••" }
-                  </p>
+        <div className="border-t border-zinc-200 pt-8 dark:border-zinc-800">
+          <h2 className="mb-6 flex items-center gap-2 text-xl font-bold text-zinc-900 dark:text-zinc-100">
+            <KeyRound className="h-5 w-5 text-zinc-400" />
+            Active Configurations
+          </h2>
+
+          {connectedKeys.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 p-10 text-center dark:border-zinc-800 dark:bg-zinc-900/40">
+              <p className="text-sm font-medium text-zinc-500">
+                No active keys synced. Start connecting a provider above.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {connectedKeys.map((config) => (
+                <div
+                  key={`${config.tenant_id}-${config.provider_name}`}
+                  className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950"
+                >
+                  <div>
+                    <p className="mb-0.5 text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                      {config.provider_name}
+                    </p>
+                    <p className="max-w-[200px] truncate font-mono text-xs text-zinc-500">
+                      {config.provider_name.includes("PHONE_NUMBER")
+                        ? config.provider_value
+                        : "****************"}
+                    </p>
+                  </div>
+                  <form action={deleteProviderAction}>
+                    <input type="hidden" name="provider_name" value={config.provider_name} />
+                    <Button
+                      type="submit"
+                      variant="ghost"
+                      size="icon"
+                      className="group h-9 w-9 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30"
+                    >
+                      <Trash2 className="h-4 w-4 transition-transform group-hover:scale-110" />
+                    </Button>
+                  </form>
                 </div>
-                <form action={deleteProviderAction}>
-                  <input type="hidden" name="provider_name" value={p.provider_name} />
-                  <Button 
-                    type="submit" 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-9 w-9 text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/30 rounded-lg group"
-                  >
-                    <Trash2 className="w-4 h-4 transition-transform group-hover:scale-110" />
-                  </Button>
-                </form>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message === "Forbidden") {
+      return (
+        <AccessDeniedState
+          title="Provider Settings Restricted"
+          description="Only workspace admins and owners can manage provider credentials, telephony numbers, and provider integrations."
+        />
+      );
+    }
 
-    </div>
-  );
+    throw error;
+  }
 }

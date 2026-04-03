@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Role } from "@prisma/client";
 import { auth } from "@/lib/auth";
+import { requireTenantRole } from "@/lib/authorization";
 import prisma from "@/lib/db";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { assertTenantOwnsPhoneNumber, normalizePhoneNumber } from "@/lib/tenant-phone-numbers";
@@ -12,6 +14,7 @@ export async function POST(req: NextRequest) {
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
 
