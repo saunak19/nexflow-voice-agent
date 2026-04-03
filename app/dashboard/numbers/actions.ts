@@ -14,6 +14,18 @@ import {
 } from "@/lib/tenant-phone-numbers";
 import { getTenantVoiceProvider } from "@/lib/voice-providers";
 
+function resolveStoredTelephonyProvider(providerKind: string, importProvider?: string) {
+  if (providerKind === "twilio-direct") {
+    return "twilio";
+  }
+
+  if (providerKind === "plivo-direct") {
+    return "plivo";
+  }
+
+  return importProvider ?? providerKind;
+}
+
 export async function buyPhoneNumberAction(formData: FormData) {
   const session = await auth();
   await requireTenantRole(session, Role.ADMIN);
@@ -43,7 +55,7 @@ export async function buyPhoneNumberAction(formData: FormData) {
     locality,
     region,
     friendlyName,
-    telephonyProvider: "bolna",
+    telephonyProvider: resolveStoredTelephonyProvider(voiceProvider.kind),
   });
 
   revalidatePath("/dashboard/numbers");
@@ -96,7 +108,7 @@ export async function importPhoneNumberAction(formData: FormData) {
   await upsertTenantPhoneNumber({
     tenantId,
     phoneNumber,
-    telephonyProvider: provider,
+    telephonyProvider: resolveStoredTelephonyProvider(voiceProvider.kind, provider),
   });
 
   revalidatePath("/dashboard/numbers");

@@ -8,9 +8,12 @@ import { Button } from "@/components/ui/button";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { listTenantProviderConfigs } from "@/lib/tenant-provider-configs";
 import { listTenantPhoneNumbers } from "@/lib/tenant-phone-numbers";
+import { getTenantVoiceProviderRuntime } from "@/lib/tenant-provider-runtime";
+import { DIRECT_PROVIDER_MODE_KEY } from "@/lib/voice-provider-mode";
 
 import { deleteProviderAction } from "./actions";
 import { ProviderCard, ProviderDef } from "./_components/provider-card";
+import { VoiceRuntimeModeCard } from "./_components/voice-runtime-mode-card";
 
 const AVAILABLE_PROVIDERS: ProviderDef[] = [
   {
@@ -64,11 +67,22 @@ export default async function ProvidersPage() {
     const session = await auth();
     await requireTenantRole(session, Role.ADMIN);
     const tenantId = await getCurrentTenantId(session);
-    const [connectedKeys, tenantPhoneNumbers] = await Promise.all([
+    const [rawConnectedKeys, tenantPhoneNumbers, runtime] = await Promise.all([
       listTenantProviderConfigs(tenantId).catch(() => []),
       listTenantPhoneNumbers(tenantId).catch(() => []),
+      getTenantVoiceProviderRuntime(tenantId),
     ]);
+    const connectedKeys = rawConnectedKeys.filter(
+      (config) => config.provider_name !== DIRECT_PROVIDER_MODE_KEY
+    );
     const configuredKeyNames = new Set(connectedKeys.map((config) => config.provider_name));
+    const runtimeView = {
+      tenantId: runtime.tenantId,
+      configuredMode: runtime.configuredMode,
+      resolvedMode: runtime.resolvedMode,
+      directProviderRequested: runtime.directProviderRequested,
+      reason: runtime.reason,
+    };
 
     for (const phoneNumber of tenantPhoneNumbers) {
       if (phoneNumber.telephony_provider?.toLowerCase() === "twilio") {
@@ -90,6 +104,8 @@ export default async function ProvidersPage() {
             workspace. Saved keys shown below are scoped to the current tenant in NexFlow.
           </p>
         </div>
+
+        <VoiceRuntimeModeCard runtime={runtimeView} />
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {AVAILABLE_PROVIDERS.map((provider) => (

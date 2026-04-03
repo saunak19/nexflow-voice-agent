@@ -10,7 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "NexFlow Admin - Bolna Voice AI Dashboard",
+  title: "NexFlow Admin - Voice AI Dashboard",
   description: "Production-ready voice AI agent management",
 };
 

@@ -1,4 +1,12 @@
 import { bolnaVoiceProvider } from "@/lib/voice-providers/bolna-provider";
+import {
+  getTenantVoiceProviderRuntime,
+  type TenantVoiceProviderRuntime,
+} from "@/lib/tenant-provider-runtime";
+import {
+  getVoiceProviderModeLabel,
+  type TenantVoiceProviderMode,
+} from "@/lib/voice-provider-mode";
 
 export type {
   VoiceProvider,
@@ -13,9 +21,11 @@ export type {
   VoiceProviderTriggerCallResult,
   VoiceProviderVoice,
 } from "@/lib/voice-providers/types";
+export type { TenantVoiceProviderMode, TenantVoiceProviderRuntime };
 
-export async function getTenantVoiceProvider(_tenantId?: string) {
-  // Today every tenant still uses Bolna underneath.
-  // This resolver is the seam where tenant-level provider selection will happen next.
-  return bolnaVoiceProvider;
+export async function getTenantVoiceProvider(tenantId?: string | null) {
+  const runtime = await getTenantVoiceProviderRuntime(tenantId);
+  return runtime.provider ?? bolnaVoiceProvider;
 }
+
+export { getTenantVoiceProviderRuntime, getVoiceProviderModeLabel };

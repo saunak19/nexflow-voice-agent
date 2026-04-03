@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+
 import { syncAgentsAction } from "@/app/dashboard/agents/actions";
+import { Button } from "@/components/ui/button";
 
 export function SyncAgentsButton() {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -13,7 +14,7 @@ export function SyncAgentsButton() {
     setIsSyncing(true);
     try {
       const result = await syncAgentsAction();
-      toast.success(`Synced ${result.synced} of ${result.total} agents from Bolna`);
+      toast.success(`Synced ${result.synced} of ${result.total} provider agents`);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Sync failed";
       toast.error(message);
@@ -30,7 +31,7 @@ export function SyncAgentsButton() {
       disabled={isSyncing}
     >
       <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
-      {isSyncing ? "Syncing…" : "Sync from Bolna"}
+      {isSyncing ? "Syncing..." : "Sync Agents"}
     </Button>
   );
 }

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { buyPhoneNumberAction } from "@/app/dashboard/numbers/actions";
 import { getCurrentTenantId } from "@/lib/tenant";
-import { getTenantVoiceProvider } from "@/lib/voice-providers";
+import { getTenantVoiceProviderRuntime, getVoiceProviderModeLabel } from "@/lib/voice-providers";
 
 export default async function SearchNumbersPage({
   searchParams,
@@ -15,7 +15,8 @@ export default async function SearchNumbersPage({
 }) {
   const session = await auth();
   const tenantId = await getCurrentTenantId(session);
-  const voiceProvider = await getTenantVoiceProvider(tenantId);
+  const runtime = await getTenantVoiceProviderRuntime(tenantId);
+  const voiceProvider = runtime.provider;
   const params = await searchParams;
   const country = params.country || "US";
   const pattern = params.pattern || "";
@@ -53,7 +54,7 @@ export default async function SearchNumbersPage({
           Search Available Numbers
         </h1>
         <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-          Search live Bolna inventory by country and optional pattern, then purchase a number from the results.
+          Search live {getVoiceProviderModeLabel(runtime.resolvedMode)} number inventory by country and optional pattern, then purchase a number from the results.
         </p>
       </div>
 

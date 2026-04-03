@@ -178,7 +178,7 @@ export function LeadAutomationSettings({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  This local NexFlow agent is mapped to the correct Bolna agent behind the scenes.
+                  This local NexFlow agent is mapped to the correct calling provider configuration behind the scenes.
                 </p>
               </div>
 

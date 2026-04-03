@@ -54,7 +54,7 @@ export function ImportNumberModal() {
         <DialogHeader>
           <DialogTitle>Import Provider Number</DialogTitle>
           <DialogDescription>
-            Register an external telephony provider number (like Twilio) into Bolna for inbound/outbound calls. You must connect the provider in Settings first.
+            Register an external telephony provider number (like Twilio) into this workspace for inbound and outbound calling. You must connect the provider in Settings first.
           </DialogDescription>
         </DialogHeader>
 

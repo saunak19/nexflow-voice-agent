@@ -41,7 +41,7 @@ export default async function AgentsPage() {
             AI Agents
           </h1>
           <p className="text-zinc-500 dark:text-zinc-400">
-            Manage your Bolna voice agents and their configurations.
+            Manage your workspace voice agents and their configurations.
           </p>
         </div>
         <div className="flex gap-2">
@@ -93,7 +93,7 @@ export default async function AgentsPage() {
                   {agent.name}
                 </h3>
                 <p className="mt-1 text-xs font-mono text-zinc-500 dark:text-zinc-400">
-                  ID: {agent.bolnaAgentId}
+                  Provider ID: {agent.bolnaAgentId}
                 </p>
                 {agent.prompt && (
                   <p className="mt-3 text-sm leading-relaxed text-zinc-600 line-clamp-3 dark:text-zinc-400">

@@ -13,15 +13,33 @@ import { deletePhoneNumberAction } from "@/app/dashboard/numbers/actions";
 import { ImportNumberModal } from "./_components/import-number-modal";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { listTenantPhoneNumbers } from "@/lib/tenant-phone-numbers";
+import { getTenantVoiceProviderRuntime } from "@/lib/voice-providers";
+
+function getNumberProviderLabel(provider?: string | null) {
+  const normalized = provider?.trim().toLowerCase();
+
+  switch (normalized) {
+    case "twilio":
+      return "Managed via Twilio";
+    case "plivo":
+      return "Managed via Plivo";
+    case "bolna":
+      return "Managed by NexFlow";
+    default:
+      return "Workspace-managed number";
+  }
+}
 
 export default async function NumbersPage() {
   const session = await auth();
   const tenantId = await getCurrentTenantId(session);
+  const runtime = await getTenantVoiceProviderRuntime(tenantId);
   let numbers: Array<{
     phone_number: string;
     locality?: string | null;
     region?: string | null;
     friendly_name?: string | null;
+    telephony_provider?: string | null;
   }> = [];
   let loadError = "";
 
@@ -39,7 +57,7 @@ export default async function NumbersPage() {
             Phone Numbers
           </h1>
           <p className="text-zinc-500 dark:text-zinc-400">
-            Provision and manage your dedicated Bolna AI phone numbers.
+            Provision and manage the caller IDs assigned to this workspace. Number inventory is currently routed through {runtime.resolvedMode === "twilio-direct" ? "Direct Twilio" : runtime.resolvedMode === "plivo-direct" ? "Direct Plivo" : "NexFlow Managed"}.
           </p>
         </div>
         <div className="flex gap-3">
@@ -78,14 +96,17 @@ export default async function NumbersPage() {
                        key={number.phone_number}
                        className="flex flex-col gap-4 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800 md:flex-row md:items-center md:justify-between"
                      >
-                       <div>
-                         <p className="font-mono text-base font-semibold text-zinc-900 dark:text-zinc-50">
-                           {number.phone_number}
-                         </p>
-                         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                           {[number.locality, number.region].filter(Boolean).join(", ") || number.friendly_name || "Bolna number"}
-                         </p>
-                       </div>
+                        <div>
+                          <p className="font-mono text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                            {number.phone_number}
+                          </p>
+                          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                            {[number.locality, number.region].filter(Boolean).join(", ") || number.friendly_name || "Workspace number"}
+                          </p>
+                          <p className="mt-2 inline-flex rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                            {getNumberProviderLabel(number.telephony_provider)}
+                          </p>
+                        </div>
                        <form action={deletePhoneNumberAction}>
                          <input type="hidden" name="phoneNumber" value={number.phone_number} />
                          <Button variant="outline" type="submit" className="rounded-xl text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-900/20">
@@ -126,10 +147,10 @@ export default async function NumbersPage() {
                  <AlertCircle className="h-3.5 w-3.5 italic" />
                  Billing Info
                </h3>
-               <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                 Provisioned numbers are billed monthly. Ensure your Bolna wallet has sufficient balance before purchasing.
-               </p>
-            </div>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                  Provisioned numbers are billed by the active provider account for this workspace. Make sure the linked provider or managed calling account has sufficient balance before purchasing.
+                </p>
+             </div>
          </div>
       </div>
     </div>
