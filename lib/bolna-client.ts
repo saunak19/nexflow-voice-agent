@@ -368,7 +368,8 @@ export class BolnaClient {
       if (batchId) {
         raw = await this.fetchApi<unknown>(`/batch/${batchId}/executions${qs}`, { method: "GET" });
       } else if (agentId) {
-        raw = await this.fetchApi<unknown>(`/v2/agent/${agentId}/executions${qs}`, { method: "GET" });
+        // suppressLog: true — 404 here means agent has no executions or is orphaned; not a real error
+        raw = await this.fetchApi<unknown>(`/v2/agent/${agentId}/executions${qs}`, { method: "GET", suppressLog: true });
       } else {
         throw new Error("getExecutions requires either agentId or batchId");
       }
@@ -394,8 +395,11 @@ export class BolnaClient {
         // We capture them purely without a single math operation.
         cost: rawExecution.cost || rawExecution.metrics?.cost || rawExecution.telephony_data?.cost || rawExecution.total_cost || 0
       })) as BolnaExecution[];
-    } catch (err) {
-      console.error("[BolnaClient] getExecutions failed:", err);
+    } catch (err: any) {
+      // Skip logging 404s — those are expected for orphaned or new agents
+      if (!err?.message?.includes("404")) {
+        console.error("[BolnaClient] getExecutions failed:", err);
+      }
       return [];
     }
   }
@@ -544,7 +548,8 @@ if (metadata.from_number) {
   // List all batches for a specific agent
   async listBatchesForAgent(agentId: string): Promise<BatchResponse[]> {
     try {
-      const raw = await this.fetchApi<any[]>(`/batches/${agentId}/all`, { method: "GET" });
+      // suppressLog: true — a 404 here means "no batch history", not a real error
+      const raw = await this.fetchApi<any[]>(`/batches/${agentId}/all`, { method: "GET", suppressLog: true });
       if (Array.isArray(raw)) {
         return raw.map((r: any) => ({
           batch_id: r.batch_id,

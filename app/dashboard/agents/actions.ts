@@ -110,7 +110,7 @@ export async function createAgentAction(formData: FormData) {
 
 // ─── Sync from Bolna ──────────────────────────────────────────────────────────
 
-export async function syncAgentsAction(): Promise<{ synced: number; total: number }> {
+export async function syncAgentsAction(): Promise<{ synced: number; deleted: number; total: number }> {
   "use server";
   try {
     const session = await auth();
@@ -123,24 +123,34 @@ export async function syncAgentsAction(): Promise<{ synced: number; total: numbe
       where: { tenantId },
       select: { id: true, bolnaAgentId: true },
     });
-    const existingAgentMap = new Map(
-      existingAgents.map((agent) => [agent.bolnaAgentId, agent.id])
-    );
-    let synced = 0;
 
-    for (const bolnaAgent of bolnaAgents) {
-      const existingId = existingAgentMap.get(bolnaAgent.agent_id);
-      if (existingId) {
-        await prisma.agent.update({
-          where: { id: existingId },
-          data: { name: bolnaAgent.agent_name },
-        });
-        synced++;
+    // Build a Set of live Bolna agent IDs for O(1) lookup
+    const liveAgentIds = new Set(bolnaAgents.map((a) => a.agent_id));
+
+    let synced = 0;
+    let deleted = 0;
+
+    for (const localAgent of existingAgents) {
+      if (!liveAgentIds.has(localAgent.bolnaAgentId)) {
+        // Agent no longer exists in Bolna — remove the orphaned local record
+        await prisma.agent.delete({ where: { id: localAgent.id } });
+        deleted++;
+      } else {
+        // Agent still exists — sync its name from Bolna
+        const bolnaAgent = bolnaAgents.find((a) => a.agent_id === localAgent.bolnaAgentId);
+        if (bolnaAgent) {
+          await prisma.agent.update({
+            where: { id: localAgent.id },
+            data: { name: bolnaAgent.agent_name },
+          });
+          synced++;
+        }
       }
     }
 
     revalidatePath("/dashboard/agents");
-    return { synced, total: existingAgents.length };
+    revalidatePath("/dashboard/batches");
+    return { synced, deleted, total: existingAgents.length };
   } catch (error) {
     console.error("[syncAgentsAction]:", error);
     throw new Error("Failed to sync agents from Bolna.");

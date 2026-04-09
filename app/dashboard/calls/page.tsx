@@ -44,10 +44,17 @@ async function getAggregatedExecutions(
       executions = await voiceProvider.getExecutions(selectedBolnaAgentId, undefined, dateRange);
     }
   } 
-  // If no filters (Global Fanout)
+    // If no filters (Global Fanout)
   else {
       const results = await Promise.all(
-      agentsList.map(agent => voiceProvider.getExecutions(agent.bolnaAgentId, undefined, dateRange))
+      agentsList.map(async agent => {
+        try {
+          return await voiceProvider.getExecutions(agent.bolnaAgentId, undefined, dateRange);
+        } catch {
+          // 404 = agent is orphaned or has no executions on Bolna — skip silently
+          return [];
+        }
+      })
     );
     executions = results.flat();
   }

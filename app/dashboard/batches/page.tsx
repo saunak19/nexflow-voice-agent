@@ -40,8 +40,11 @@ export default async function BatchesPage({
       if (!agent.bolnaAgentId) return [];
       try {
         return await voiceProvider.listBatchesForAgent(agent.bolnaAgentId);
-      } catch (e) {
-        console.error(`Failed to fetch batches for agent ${agent.id}`);
+      } catch (e: any) {
+        // 404 means the agent exists locally but has no batch history on Bolna — expected, skip silently
+        if (!e?.message?.includes("404")) {
+          console.error(`Failed to fetch batches for agent ${agent.id}:`, e);
+        }
         return [];
       }
     });
