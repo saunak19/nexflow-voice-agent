@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { deleteSipTrunkAction } from "@/app/dashboard/sip-trunks/actions";
+import { MotionList, MotionItem } from "@/components/ui/motion-list";
 
 export default async function SipTrunksPage() {
   const session = await auth();
@@ -23,7 +24,7 @@ export default async function SipTrunksPage() {
   });
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
@@ -59,9 +60,9 @@ export default async function SipTrunksPage() {
            </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <MotionList className="grid grid-cols-1 gap-6 md:grid-cols-2">
            {trunks.map((trunk) => (
-             <div key={trunk.id} className="group relative flex flex-col rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950">
+             <MotionItem key={trunk.id} className="group relative flex flex-col rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
                 <div className="flex items-start justify-between">
                   <div className="h-12 w-12 rounded-xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-900 dark:text-zinc-50">
                      <Network className="h-6 w-6" />
@@ -100,9 +101,9 @@ export default async function SipTrunksPage() {
                       </form>
                    </div>
                 </div>
-             </div>
+             </MotionItem>
            ))}
-        </div>
+        </MotionList>
       )}
     </div>
   );

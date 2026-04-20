@@ -44,7 +44,7 @@ export default async function NewKnowledgeBasePage({
               Knowledge source details
             </h2>
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              You can save the Bolna knowledge-base ID now or add it later after syncing.
+              You can save the knowledge-base ID now or add it later after syncing.
             </p>
           </div>
         </div>
@@ -74,7 +74,7 @@ export default async function NewKnowledgeBasePage({
 
           <div className="space-y-2">
             <label htmlFor="bolnaKbId" className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-              Bolna knowledge ID
+              Provider knowledge ID
             </label>
             <Input id="bolnaKbId" name="bolnaKbId" placeholder="Optional" className="h-11 rounded-xl font-mono" />
           </div>

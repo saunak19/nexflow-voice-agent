@@ -5,6 +5,13 @@ import { use } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { createAgentAction } from "@/app/dashboard/agents/actions";
 import { auth } from "@/lib/auth";
 import { getCurrentTenantId } from "@/lib/tenant";
@@ -15,10 +22,6 @@ import { SubmitButton } from "./_submit-button";
 
 // ─── Shared select style ───────────────────────────────────────────────────────
 
-const selectCls =
-  "flex h-11 w-full appearance-none rounded-xl border border-zinc-200 bg-transparent px-4 py-2 text-sm " +
-  "text-zinc-900 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 " +
-  "dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-50 dark:focus:border-zinc-600 dark:focus:ring-zinc-800";
 
 // ─── Page (Server Component — fetches real voices from Bolna) ─────────────────
 
@@ -31,10 +34,15 @@ export default async function NewAgentPage() {
   let voices: VoiceProviderVoice[] = [];
   try {
     const all = await voiceProvider.listVoices();
-    voices = all.filter((v) => v.provider === "sarvam");
-    // DEBUG: print full sarvam voice objects so we know exact field values
-    console.log("[NewAgentPage] ALL voices count:", all.length);
-    console.log("[NewAgentPage] Sarvam voices (full):", JSON.stringify(voices, null, 2));
+    const sarvamVoices = all.filter((v) => v.provider === "sarvam");
+    
+    // Deduplicate voices by voice_id, since the Bolna API may return multiples
+    const seen = new Set<string>();
+    voices = sarvamVoices.filter((v) => {
+      if (seen.has(v.voice_id)) return false;
+      seen.add(v.voice_id);
+      return true;
+    });
   } catch (err) {
     console.error("[NewAgentPage] Failed to fetch voices:", err);
   }
@@ -56,7 +64,7 @@ export default async function NewAgentPage() {
           Create New Agent
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">
-          Configure your voice agent. NexFlow will provision it on Bolna with
+          Configure your voice agent. NexFlow will provision it with
           the Sarvam speech stack and Azure LLM.
         </p>
       </div>
@@ -64,14 +72,14 @@ export default async function NewAgentPage() {
       {/* No voices warning */}
       {!hasVoices && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
-          <strong>No Sarvam voices found</strong> in your Bolna account.{" "}
+          <strong>No Sarvam voices found</strong> in your account.{" "}
           <a
             href="https://platform.bolna.ai"
             target="_blank"
             rel="noopener noreferrer"
             className="underline underline-offset-2"
           >
-            Add voices in the Bolna dashboard
+            Add voices in the configuration
           </a>{" "}
           before creating an agent.
         </div>
@@ -124,24 +132,20 @@ export default async function NewAgentPage() {
             >
               Language <span className="text-red-500">*</span>
             </label>
-            <select
-              id="language"
-              name="language"
-              required
-              defaultValue=""
-              className={selectCls}
-            >
-              <option value="" disabled>
-                Select language…
-              </option>
-              <option value="en">English</option>
-              <option value="hi">Hindi — हिन्दी</option>
-              <option value="gu">Gujarati — ગુજરાતી</option>
-              <option value="mr">Marathi — मराठी</option>
-              <option value="bn">Bengali — বাংলা</option>
-              <option value="ta">Tamil — தமிழ்</option>
-              <option value="te">Telugu — తెలుగు</option>
-            </select>
+            <Select name="language" defaultValue="" required>
+              <SelectTrigger className="h-11 rounded-xl w-full">
+                <SelectValue placeholder="Select language…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">English</SelectItem>
+                <SelectItem value="hi">Hindi — हिन्दी</SelectItem>
+                <SelectItem value="gu">Gujarati — ગુજરાતી</SelectItem>
+                <SelectItem value="mr">Marathi — मराठी</SelectItem>
+                <SelectItem value="bn">Bengali — বাংলা</SelectItem>
+                <SelectItem value="ta">Tamil — தமிழ்</SelectItem>
+                <SelectItem value="te">Telugu — తెలుగు</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* 3. Voice — populated from GET /me/voices (Sarvam only) */}
@@ -152,28 +156,23 @@ export default async function NewAgentPage() {
             >
               Voice <span className="text-red-500">*</span>
             </label>
-            <select
-              id="voiceId"
-              name="voiceId"
-              required
-              defaultValue=""
-              disabled={!hasVoices}
-              className={selectCls}
-            >
-              <option value="" disabled>
-                {hasVoices ? "Select voice…" : "No voices available"}
-              </option>
-              {voices.map((v) => (
-                <option key={v.id} value={v.voice_id}>
-                  {v.name}
-                  {v.accent ? ` — ${v.accent}` : ""}
-                </option>
-              ))}
-            </select>
+            <Select name="voiceId" defaultValue="" required disabled={!hasVoices}>
+              <SelectTrigger className="h-11 rounded-xl w-full">
+                <SelectValue placeholder={hasVoices ? "Select voice…" : "No voices available"} />
+              </SelectTrigger>
+              <SelectContent>
+                {voices.map((v) => (
+                  <SelectItem key={v.voice_id} value={v.voice_id}>
+                    {v.name}
+                    {v.accent ? ` — ${v.accent}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {hasVoices && (
               <p className="text-xs text-zinc-400 dark:text-zinc-500">
                 {voices.length} Sarvam voice{voices.length !== 1 ? "s" : ""}{" "}
-                registered in your Bolna account.
+                registered in your account.
               </p>
             )}
           </div>

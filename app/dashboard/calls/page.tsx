@@ -6,6 +6,7 @@ import { ExecutionsTable } from "./_components/executions-table";
 import { ExecutionsFilterBar } from "./_components/executions-filter-bar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTenantVoiceProvider, type VoiceProviderExecution } from "@/lib/voice-providers";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { 
   PhoneOutgoing, 
   Clock, 
@@ -141,7 +142,7 @@ export default async function CallsPage({
   const activeCount = totalExecutions - (completedCount + failedCount);
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
@@ -250,17 +251,12 @@ export default async function CallsPage({
         </Card>
       </div>
 
-      {/* ─── Executions Data Table ──────────────────────────────────────────── */}
       <div className="space-y-4 pt-4">
         <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
           Detailed Logs
         </h2>
         
-        <Suspense fallback={
-          <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
-            <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-zinc-900 dark:border-white"></div>
-          </div>
-        }>
+        <Suspense fallback={<TableSkeleton rows={6} cols={7} />}>
           <ExecutionsTable data={executions} />
         </Suspense>
       </div>

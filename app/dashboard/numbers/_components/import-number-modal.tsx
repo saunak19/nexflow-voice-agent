@@ -16,6 +16,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { importPhoneNumberAction } from "@/app/dashboard/numbers/actions";
 
 function SubmitButton() {
@@ -75,16 +82,16 @@ export function ImportNumberModal() {
               <Label htmlFor="provider" className="text-sm font-semibold">
                 Provider
               </Label>
-              <select
-                id="provider"
-                name="provider"
-                defaultValue="twilio"
-                className="flex h-10 w-full rounded-xl border border-zinc-200 bg-transparent px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:ring-offset-zinc-950 dark:focus-visible:ring-zinc-300"
-              >
-                <option value="twilio">Twilio</option>
-                <option value="plivo">Plivo</option>
-                <option value="vobiz">Vobiz</option>
-              </select>
+              <Select name="provider" defaultValue="twilio">
+                <SelectTrigger className="h-10 rounded-xl w-full">
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="twilio">Twilio</SelectItem>
+                  <SelectItem value="plivo">Plivo</SelectItem>
+                  <SelectItem value="vobiz">Vobiz</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             
             <div className="space-y-2">

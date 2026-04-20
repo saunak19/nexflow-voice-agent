@@ -115,7 +115,7 @@ export function CreateBatchForm({ agents, phoneNumbers }: { agents: any[], phone
     <SelectValue placeholder="Select a phone number" />
   </SelectTrigger>
   <SelectContent>
-    <SelectItem value="bolna_managed">Bolna managed numbers</SelectItem>
+    <SelectItem value="bolna_managed">NexFlow managed numbers</SelectItem>
     {phoneNumbers.map((n) => (
       <SelectItem key={n.phone_number} value={n.phone_number}>
         {n.phone_number}

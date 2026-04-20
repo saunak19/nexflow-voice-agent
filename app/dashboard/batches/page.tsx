@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import prisma from "@/lib/db";
 import { auth } from "@/lib/auth";
@@ -5,6 +6,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { getTenantVoiceProvider, type VoiceProviderBatch } from "@/lib/voice-providers";
+import { TableSkeleton } from "@/components/ui/skeleton";
 
 import { BatchesTable } from "./_components/batches-table";
 import { AgentFilter } from "./_components/agent-filter";
@@ -61,7 +63,7 @@ export default async function BatchesPage({
   });
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
@@ -84,7 +86,9 @@ export default async function BatchesPage({
         </div>
       </div>
 
-      <BatchesTable batches={batches} agents={agents} />
+      <Suspense fallback={<TableSkeleton rows={4} cols={7} />}>
+        <BatchesTable batches={batches} agents={agents} />
+      </Suspense>
     </div>
   );
 }

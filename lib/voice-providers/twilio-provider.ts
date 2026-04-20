@@ -35,6 +35,10 @@ export class TwilioDirectProvider implements VoiceProvider {
     return this.fallbackProvider.listAgents();
   }
 
+  getAgent(agentId: string) {
+    return this.fallbackProvider.getAgent(agentId);
+  }
+
   updateAgent(
     agentId: string,
     payload: {

@@ -8,6 +8,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   getVoiceProviderModeLabel,
   type TenantVoiceProviderMode,
   type TenantVoiceProviderRuntimeView,
@@ -116,17 +123,20 @@ export function VoiceRuntimeModeCard({ runtime }: VoiceRuntimeModeCardProps) {
               Workspace voice mode
             </label>
             <div className="mt-3 flex flex-col gap-3">
-            <select
-              id="providerMode"
+            <Select
               name="providerMode"
               value={providerMode}
-              onChange={(event) => setProviderMode(event.target.value as TenantVoiceProviderMode)}
-              className="h-10 rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+              onValueChange={(val) => setProviderMode(val as TenantVoiceProviderMode)}
             >
-              <option value="bolna">NexFlow Managed (stable default)</option>
-              <option value="twilio-direct">Direct Twilio (number management live)</option>
-              <option value="plivo-direct">Direct Plivo (number management live)</option>
-            </select>
+              <SelectTrigger className="h-10 rounded-xl w-full border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+                <SelectValue placeholder="Select workspace voice mode" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bolna">NexFlow Managed (stable default)</SelectItem>
+                <SelectItem value="twilio-direct">Direct Twilio (number management live)</SelectItem>
+                <SelectItem value="plivo-direct">Direct Plivo (number management live)</SelectItem>
+              </SelectContent>
+            </Select>
               <div className="flex flex-col gap-3 sm:flex-row">
               <Button
                 type="button"

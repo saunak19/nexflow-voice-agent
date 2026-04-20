@@ -46,7 +46,7 @@ export default async function AgentDetailPage({
               {agent.name}
             </h1>
             <p className="mt-2 font-mono text-sm text-zinc-500 dark:text-zinc-400">
-              Bolna agent ID: {agent.bolnaAgentId}
+              Agent ID: {agent.bolnaAgentId}
             </p>
           </div>
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950">

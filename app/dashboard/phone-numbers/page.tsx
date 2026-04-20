@@ -9,7 +9,7 @@ export default async function PhoneNumbersPage() {
   const phoneNumbers = await listTenantPhoneNumbers(tenantId);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-6xl">
+    <div className="space-y-8 max-w-6xl">
       <div>
         <h1 className="text-2xl font-bold">My Phone Numbers</h1>
         <p className="text-zinc-500 mt-1">Buy and view your phone numbers</p>
@@ -51,7 +51,7 @@ export default async function PhoneNumbersPage() {
                       -
                     </TableCell>
                     <TableCell className="text-zinc-500">
-                      {num.telephony_provider || "bolna"}
+                      {num.telephony_provider || "NexFlow Managed"}
                     </TableCell>
                     <TableCell className="text-zinc-500">
                       n/a

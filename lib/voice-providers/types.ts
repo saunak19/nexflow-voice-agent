@@ -29,6 +29,7 @@ export interface VoiceProvider {
   listVoices(): Promise<VoiceProviderVoice[]>;
   createAgent(params: VoiceProviderCreateAgentParams): Promise<VoiceProviderCreateAgentResult>;
   listAgents(): Promise<VoiceProviderAgent[]>;
+  getAgent(agentId: string): Promise<VoiceProviderAgent>;
   updateAgent(agentId: string, payload: {
     agent_config?: {
       agent_name?: string;

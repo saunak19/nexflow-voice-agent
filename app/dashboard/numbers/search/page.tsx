@@ -4,6 +4,13 @@ import { ArrowLeft, Globe, Search, ShoppingCart } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { buyPhoneNumberAction } from "@/app/dashboard/numbers/actions";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { getTenantVoiceProviderRuntime, getVoiceProviderModeLabel } from "@/lib/voice-providers";
@@ -64,15 +71,15 @@ export default async function SearchNumbersPage({
             <label htmlFor="country" className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
               Country
             </label>
-            <select
-              id="country"
-              name="country"
-              defaultValue={country}
-              className="h-11 w-full rounded-xl border border-zinc-200 bg-transparent px-4 text-sm outline-none transition focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/40 dark:focus:border-zinc-600"
-            >
-              <option value="US">US</option>
-              <option value="IN">IN</option>
-            </select>
+            <Select name="country" defaultValue={country}>
+              <SelectTrigger className="h-11 w-full rounded-xl border-zinc-200 bg-transparent px-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+                <SelectValue placeholder="Select country" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="US">US</SelectItem>
+                <SelectItem value="IN">IN</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

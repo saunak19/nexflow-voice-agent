@@ -22,6 +22,10 @@ export class BolnaVoiceProvider implements VoiceProvider {
     return bolnaClient.listAgents();
   }
 
+  getAgent(agentId: string) {
+    return bolnaClient.getAgent(agentId);
+  }
+
   updateAgent(agentId: string, payload: {
     agent_config?: {
       agent_name?: string;

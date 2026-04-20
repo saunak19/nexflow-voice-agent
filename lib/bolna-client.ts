@@ -281,10 +281,6 @@ export class BolnaClient {
     // The API may return a bare array OR an object like { voices:[...] } / { data:[...] }
     const raw = await this.fetchApi<unknown>("/me/voices", { method: "GET" });
 
-    if (process.env.NODE_ENV === "development") {
-      console.log("[BolnaClient] listVoices raw response:", JSON.stringify(raw).slice(0, 2000));
-    }
-
     if (Array.isArray(raw)) return raw as BolnaVoice[];
 
     if (raw && typeof raw === "object") {
@@ -382,11 +378,6 @@ export class BolnaClient {
         mapped = raw as BolnaExecution[];
       }
       
-      if (mapped.length > 0) {
-        // 1. Log and Inspect the Raw Payload as instructed
-        console.log("[Raw Bolna Execution Payload]:", JSON.stringify(mapped[0], null, 2));
-      }
-
       // 2. Map exact cost without ANY math manipulations
       return mapped.map((rawExecution: any) => ({
         ...rawExecution,

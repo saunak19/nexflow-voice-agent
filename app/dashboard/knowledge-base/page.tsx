@@ -18,6 +18,8 @@ import { getCurrentTenantId } from "@/lib/tenant";
 import { deleteKnowledgeBaseAction } from "@/app/dashboard/knowledge-base/actions";
 import { CreateKnowledgeDialog } from "./_components/create-kb-dialog";
 
+import { MotionList, MotionItem } from "@/components/ui/motion-list";
+
 const statusIconMap: Record<string, LucideIcon> = {
   pending: Clock,
   indexing: Cloud,
@@ -42,7 +44,7 @@ export default async function KnowledgeBasePage() {
   });
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
@@ -71,13 +73,13 @@ export default async function KnowledgeBasePage() {
            </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <MotionList className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
            {knowledgeBases.map((kb) => {
              const Icon = kb.type === 'pdf' ? FileText : Globe;
              const StatusIcon = statusIconMap[kb.status] || Clock;
 
              return (
-               <div key={kb.id} className="group relative flex flex-col rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950">
+               <MotionItem key={kb.id} className="group relative flex flex-col rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
                   <div className="flex items-start justify-between">
                     <div className="h-12 w-12 rounded-xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-600 dark:text-zinc-400">
                        <Icon className="h-6 w-6" />
@@ -104,10 +106,10 @@ export default async function KnowledgeBasePage() {
                         </Button>
                      </form>
                   </div>
-               </div>
+               </MotionItem>
              )
            })}
-        </div>
+        </MotionList>
       )}
     </div>
   );

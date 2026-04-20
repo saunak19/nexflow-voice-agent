@@ -7,6 +7,7 @@ import { MagicCallButton } from "@/components/magic-call-button";
 import { getCurrentTenantId } from "@/lib/tenant";
 import { SyncAgentsButton } from "@/components/sync-agents-button";
 import { DeleteAgentButton } from "./_components/delete-agent-button";
+import { AgentsList } from "./_components/agents-list";
 import { listTenantPhoneNumbers } from "@/lib/tenant-phone-numbers";
 
 function formatDate(date: Date) {
@@ -74,53 +75,10 @@ export default async function AgentsPage() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {agents.map((agent: (typeof agents)[0]) => (
-            <div
-              key={agent.id}
-              className="group relative flex flex-col rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-900 text-white dark:bg-zinc-800 transition-transform group-hover:scale-110">
-                  <User className="h-6 w-6" />
-                </div>
-                <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
-                  Ready
-                </span>
-              </div>
-              <div className="mt-4 flex-1 flex flex-col">
-                <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                  {agent.name}
-                </h3>
-                <p className="mt-1 text-xs font-mono text-zinc-500 dark:text-zinc-400">
-                  Provider ID: {agent.bolnaAgentId}
-                </p>
-                {agent.prompt && (
-                  <p className="mt-3 text-sm leading-relaxed text-zinc-600 line-clamp-3 dark:text-zinc-400">
-                    {agent.prompt}
-                  </p>
-                )}
-                <div className="mt-auto pt-4 flex items-center justify-between text-xs font-medium text-zinc-500 dark:text-zinc-500">
-                  <span>Created: {formatDate(agent.createdAt)}</span>
-                  <span>Updated: {formatDate(agent.updatedAt)}</span>
-                </div>
-              </div>
-              <div className="mt-6 flex flex-col space-y-4">
-                 <MagicCallButton agentId={agent.id} tenantId={agent.tenantId} phoneNumbers={phoneNumbers.map(n => ({ phone_number: n.phone_number }))} />
-                 
-                 <div className="flex w-full items-center gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                   <Button asChild variant="outline" className="flex-1 justify-center rounded-lg text-xs" size="sm">
-                     <Link href={`/dashboard/agents/${agent.id}`}>
-                       <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                       Edit
-                     </Link>
-                   </Button>
-                   <DeleteAgentButton localId={agent.id} bolnaId={agent.bolnaAgentId} />
-                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <AgentsList 
+          agents={agents} 
+          phoneNumbers={phoneNumbers.map(n => ({ phone_number: n.phone_number }))} 
+        />
       )}
     </div>
   );

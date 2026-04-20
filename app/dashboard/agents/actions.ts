@@ -118,32 +118,41 @@ export async function syncAgentsAction(): Promise<{ synced: number; deleted: num
     const tenantId = await getCurrentTenantId(session);
     const voiceProvider = await getTenantVoiceProvider(tenantId);
 
-    const bolnaAgents = await voiceProvider.listAgents();
     const existingAgents = await prisma.agent.findMany({
       where: { tenantId },
       select: { id: true, bolnaAgentId: true },
     });
 
-    // Build a Set of live Bolna agent IDs for O(1) lookup
-    const liveAgentIds = new Set(bolnaAgents.map((a) => a.agent_id));
-
     let synced = 0;
     let deleted = 0;
 
     for (const localAgent of existingAgents) {
-      if (!liveAgentIds.has(localAgent.bolnaAgentId)) {
-        // Agent no longer exists in Bolna — remove the orphaned local record
-        await prisma.agent.delete({ where: { id: localAgent.id } });
-        deleted++;
-      } else {
+      try {
+        const bolnaAgent = await voiceProvider.getAgent(localAgent.bolnaAgentId);
+        
         // Agent still exists — sync its name from Bolna
-        const bolnaAgent = bolnaAgents.find((a) => a.agent_id === localAgent.bolnaAgentId);
-        if (bolnaAgent) {
+        if (bolnaAgent && bolnaAgent.agent_name) {
           await prisma.agent.update({
             where: { id: localAgent.id },
             data: { name: bolnaAgent.agent_name },
           });
           synced++;
+        }
+      } catch (err: any) {
+        if (err.message?.includes("404")) {
+          // Agent no longer exists in Bolna
+          const callExecutions = await prisma.callExecution.findMany({ where: { agentId: localAgent.id }, select: { id: true } });
+          const callExecutionIds = callExecutions.map((ce) => ce.id);
+
+          await prisma.$transaction([
+            prisma.callLog.deleteMany({ where: { callExecutionId: { in: callExecutionIds } } }),
+            prisma.callExecution.deleteMany({ where: { agentId: localAgent.id } }),
+            prisma.batch.deleteMany({ where: { agentId: localAgent.id } }),
+            prisma.agent.delete({ where: { id: localAgent.id } })
+          ]);
+          deleted++;
+        } else {
+          console.warn(`[syncAgentsAction] Could not fetch agent ${localAgent.bolnaAgentId}:`, err);
         }
       }
     }
@@ -183,7 +192,15 @@ export async function deleteAgentAction(localAgentId: string, _bolnaAgentId: str
       }
     }
 
-    await prisma.agent.delete({ where: { id: localAgentId } });
+    const callExecutions = await prisma.callExecution.findMany({ where: { agentId: localAgentId }, select: { id: true } });
+    const callExecutionIds = callExecutions.map((ce) => ce.id);
+
+    await prisma.$transaction([
+      prisma.callLog.deleteMany({ where: { callExecutionId: { in: callExecutionIds } } }),
+      prisma.callExecution.deleteMany({ where: { agentId: localAgentId } }),
+      prisma.batch.deleteMany({ where: { agentId: localAgentId } }),
+      prisma.agent.delete({ where: { id: localAgentId } })
+    ]);
     revalidatePath("/dashboard/agents");
   } catch (error) {
     console.error("[deleteAgentAction]:", error);

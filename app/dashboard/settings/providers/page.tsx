@@ -94,7 +94,7 @@ export default async function ProvidersPage() {
     }
 
     return (
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 animate-in fade-in duration-500 pb-20">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 pb-20">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
             Integrations & Providers
