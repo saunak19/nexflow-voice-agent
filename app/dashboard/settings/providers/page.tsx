@@ -1,4 +1,5 @@
-import { Trash2, KeyRound } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Trash2, KeyRound } from "lucide-react";
 import { Role } from "@prisma/client";
 
 import { auth } from "@/lib/auth";
@@ -96,6 +97,13 @@ export default async function ProvidersPage() {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 pb-20">
         <div>
+          <Link
+            href="/dashboard/settings"
+            className="mb-4 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to settings
+          </Link>
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
             Integrations & Providers
           </h1>

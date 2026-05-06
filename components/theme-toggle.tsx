@@ -1,26 +1,68 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Avoid hydration mismatch — only render after mount
   useEffect(() => setMounted(true), []);
 
   if (!mounted) {
-    // Render a placeholder the same size so layout doesn't shift
     return <div className="h-9 w-9" />;
   }
 
   const isDark = resolvedTheme === "dark";
 
+  const handleToggle = async () => {
+    const nextTheme = isDark ? "light" : "dark";
+
+    // Fallback: no View Transitions API support
+    if (!document.startViewTransition) {
+      setTheme(nextTheme);
+      return;
+    }
+
+    // Get button position to anchor the ripple from top-right area
+    const btn = buttonRef.current;
+    const x = btn ? btn.getBoundingClientRect().right : window.innerWidth;
+    const y = btn ? btn.getBoundingClientRect().top : 0;
+
+    // Maximum radius — distance from top-right to bottom-left corner
+    const endRadius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y)
+    );
+
+    const transition = document.startViewTransition(() => {
+      setTheme(nextTheme);
+    });
+
+    await transition.ready;
+
+    // Animate the new theme view expanding from top-right to bottom-left
+    document.documentElement.animate(
+      {
+        clipPath: [
+          `circle(0px at ${x}px ${y}px)`,
+          `circle(${endRadius}px at ${x}px ${y}px)`,
+        ],
+      },
+      {
+        duration: 600,
+        easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+        pseudoElement: "::view-transition-new(root)",
+      }
+    );
+  };
+
   return (
     <button
-      onClick={() => setTheme(isDark ? "light" : "dark")}
+      ref={buttonRef}
+      onClick={handleToggle}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       className={`
         relative inline-flex h-9 w-9 items-center justify-center rounded-xl

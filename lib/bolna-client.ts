@@ -732,7 +732,8 @@ export interface CreateAgentParams {
   prompt: string;
   language: string; // e.g. "hi", "en", "gu"
   voiceId: string;  // The `voice_id` string from GET /me/voices — NOT a display name
-  voiceName: string;
+  voiceName: string; // Friendly label for local display/debugging only
+  voiceModel: string;
 }
 
 export interface CreateAgentResult {
@@ -888,8 +889,8 @@ export async function createBolnaAgent(
               provider: "sarvam",
               provider_config: {
                 voice_id: params.voiceId,
-                voice: params.voiceName,
-                model: "bulbul:v2",
+                voice: params.voiceId, // Send ID, not Name to avoid 400 errors
+                model: params.voiceModel,
                 language: params.language,
               },
               stream: true,

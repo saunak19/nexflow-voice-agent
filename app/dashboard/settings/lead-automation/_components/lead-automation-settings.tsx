@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, RefreshCcw, Save, Webhook } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Copy, RefreshCcw, Save, Webhook } from "lucide-react";
 import { toast } from "sonner";
 
 import { regenerateLeadAutomationSecretAction, saveLeadAutomationConfigAction } from "@/app/dashboard/settings/lead-automation/actions";
@@ -121,6 +122,13 @@ export function LeadAutomationSettings({
     <div className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
+          <Link
+            href="/dashboard/settings"
+            className="mb-4 inline-flex items-center gap-2 text-sm text-zinc-500 transition hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to settings
+          </Link>
           <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
             Lead Automation
           </h1>

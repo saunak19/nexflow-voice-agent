@@ -180,17 +180,17 @@ model SipTrunk {
 }
 
 model TenantPhoneNumber {
-  phoneNumber      String   @id
-  tenantId         String
-  friendlyName     String?
-  locality         String?
-  region           String?
-  country          String?
-  postalCode       String?
-  telephonyProvider String?
-  providerNumberId String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  phoneNumber       String   @id @map("phone_number")
+  tenantId          String   @map("tenant_id")
+  friendlyName      String?  @map("friendly_name")
+  locality          String?
+  region            String?
+  country           String?
+  postalCode        String?  @map("postal_code")
+  telephonyProvider String?  @map("telephony_provider")
+  providerNumberId  String?  @map("provider_number_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

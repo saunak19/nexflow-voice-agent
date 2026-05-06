@@ -77,6 +77,7 @@ export async function createAgentAction(formData: FormData) {
       language: parsed.language,
       voiceId: parsed.voiceId,
       voiceName: selectedVoice.name,
+      voiceModel: selectedVoice.model || "bulbul:v2",
     });
 
     // ── Persist to database ────────────────────────────────────────────────
@@ -90,6 +91,7 @@ export async function createAgentAction(formData: FormData) {
           language: parsed.language,
           voiceId: parsed.voiceId,
           voiceName: selectedVoice.name,
+          voiceModel: selectedVoice.model || "bulbul:v2",
           provider: "sarvam",
         },
       },

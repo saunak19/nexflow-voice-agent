@@ -37,3 +37,34 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Docker
+
+This repository includes a Docker setup for the Next.js app that reuses the existing Dockerized Postgres and Redis services already running on the host.
+
+- Postgres: `localhost:5433`
+- Redis: `localhost:6379`
+- App: `localhost:3000`
+
+The compose file intentionally does not create a second database container, so your current data path stays unchanged.
+
+### Start the app container
+
+```bash
+docker compose up --build -d
+```
+
+### Stop the app container
+
+```bash
+docker compose down
+```
+
+### Notes
+
+- `docker-compose.yml` reads secrets from `.env`.
+- Inside Docker, the app connects to the existing host-published services through `host.docker.internal`.
+- On startup, the container runs Prisma client generation and then:
+  - `prisma migrate deploy` if migrations exist
+  - otherwise `prisma db push`
+- The Next.js production build is created inside the container before the app starts.
